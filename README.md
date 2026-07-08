@@ -44,9 +44,26 @@ Running locally only works while your computer is on. To get a link that works f
    - Instance type: **Free**
 4. Click **Create Web Service**. Render will give you a permanent URL like `https://your-app.onrender.com`.
 
-**Important:** Render's free tier wipes the app's file storage whenever it goes idle and restarts (after ~15 minutes of no traffic), so submissions saved on disk aren't reliable long-term on the free tier. That's what part 4 solves.
+**Important:** Render's free tier wipes the app's file storage whenever it goes idle and restarts (after ~15 minutes of no traffic) — this deletes every stored form, including your duplicated per-property links, not just submissions. That's what part 4 solves, for free, without needing a paid plan.
 
-## 4. Get emailed a copy of every application (so nothing is lost)
+## 4. Make your data permanent (free, via MongoDB Atlas)
+
+The app can store everything in a free MongoDB Atlas database instead of Render's own disk, so your duplicated property forms, their links, and all submissions survive restarts indefinitely.
+
+1. Go to [mongodb.com/cloud/atlas](https://mongodb.com/cloud/atlas/register) and sign up free (no credit card needed).
+2. Create a free cluster: choose the **M0 Free** tier, pick any region, and click **Create**.
+3. When prompted to create a database user, set a username and password (click **Autogenerate Secure Password** and copy it somewhere safe) — this logs the app into your database, not you into a website, so it's fine to autogenerate.
+4. Under **Network Access**, click **Add IP Address** → **Allow Access from Anywhere** (`0.0.0.0/0`). This is fine here since the connection still requires the username/password from step 3.
+5. Click **Connect** on your cluster → **Drivers** → copy the connection string, which looks like `mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/`. Replace `<username>` and `<password>` with what you set in step 3.
+6. In Render, go to your service → **Environment** → **Add Environment Variable**:
+   - Key: `MONGODB_URI` — Value: the connection string from step 5
+7. Save. Render redeploys automatically. Check the **Logs** tab for `Storage backend: MongoDB (persistent)` to confirm it's connected.
+
+One thing to know: if the database goes completely unused for 30 days, MongoDB automatically pauses it (data is kept, not deleted) and you'd need to click **Resume** in the Atlas dashboard before the form works again. Given occasional use, this is very unlikely to come up, but worth knowing.
+
+*(Running locally instead? Copy `.env.example` to `.env` and fill in `MONGODB_URI` the same way — or just leave it blank, since local runs already use a plain file and don't need this.)*
+
+## 5. Get emailed a copy of every application too
 
 Since free hosting can't reliably keep files long-term, the app emails you a copy of every submission the moment it comes in — so even if the on-site dashboard resets, you always have the record in your inbox.
 
@@ -63,7 +80,7 @@ You don't need to verify a domain in Resend for this — sending to your own acc
 
 ## Data storage
 
-Locally, everything lives in `data/db.json`. On Render's free tier, treat that file as temporary — the email copies are your permanent record. If you'd rather have a fully reliable on-site dashboard too, Render's cheapest plan with a persistent disk (~$7/month) removes this limitation entirely — just ask if you want that set up instead.
+Locally (no `MONGODB_URI` set), everything lives in `data/db.json`. Once `MONGODB_URI` is set (see part 4), all reads/writes go to your free MongoDB Atlas database instead, and that file is unused.
 
 The responses table and CSV export automatically expand each adult into its own set of columns (e.g. "Adult 1 - Full Name", "Adult 2 - Full Name" …), so multi-person applications open cleanly in Excel/Sheets.
 

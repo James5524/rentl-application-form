@@ -9,18 +9,26 @@ const template = require('./template-data');
 
 const genId = () => crypto.randomBytes(6).toString('hex');
 
-const db = readDb();
-const now = new Date().toISOString();
-const form = {
-  id: genId(),
-  title: template.title,
-  description: '',
-  fields: template.fields,
-  createdAt: now,
-  updatedAt: now
-};
-db.forms.push(form);
-writeDb(db);
+async function main() {
+  const db = await readDb();
+  const now = new Date().toISOString();
+  const form = {
+    id: genId(),
+    title: template.title,
+    description: '',
+    fields: template.fields,
+    createdAt: now,
+    updatedAt: now
+  };
+  db.forms.push(form);
+  await writeDb(db);
 
-console.log(`Created "${template.title}" (id: ${form.id}).`);
-console.log('Open the app, click "Duplicate" on this form for each property, and give it that property\'s title.');
+  console.log(`Created "${template.title}" (id: ${form.id}).`);
+  console.log('Open the app, click "Duplicate" on this form for each property, and give it that property\'s title.');
+  process.exit(0);
+}
+
+main().catch(err => {
+  console.error('Failed to seed template:', err);
+  process.exit(1);
+});

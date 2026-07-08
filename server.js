@@ -2,7 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
-const { readDb, writeDb } = require('./db');
+const { readDb, writeDb, useMongo } = require('./db');
 
 // Load simple KEY=VALUE pairs from a .env file, if present, without adding a dependency.
 function loadEnvFile() {
@@ -162,10 +162,21 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const genId = () => crypto.randomBytes(6).toString('hex');
 
+// Wrap async route handlers so a thrown/rejected error becomes a clean 500
+// response instead of hanging the request or crashing the process.
+function asyncRoute(handler) {
+  return (req, res) => {
+    handler(req, res).catch(err => {
+      console.error('Request error:', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Something went wrong on the server.' });
+    });
+  };
+}
+
 // If there are no forms at all (fresh install, or free-tier storage got wiped
 // on restart), recreate the RENTL Application Template so it's always there.
-function ensureSeedTemplate() {
-  const db = readDb();
+async function ensureSeedTemplate() {
+  const db = await readDb();
   if (db.forms.length > 0) return;
   const template = require('./template-data');
   const now = new Date().toISOString();
@@ -177,16 +188,15 @@ function ensureSeedTemplate() {
     createdAt: now,
     updatedAt: now
   });
-  writeDb(db);
+  await writeDb(db);
   console.log(`Seeded default form: "${template.title}"`);
 }
-ensureSeedTemplate();
 
 // ---------- Forms API ----------
 
 // List all forms (summary only)
-app.get('/api/forms', (req, res) => {
-  const db = readDb();
+app.get('/api/forms', asyncRoute(async (req, res) => {
+  const db = await readDb();
   const summaries = db.forms.map(f => ({
     id: f.id,
     title: f.title,
@@ -197,19 +207,19 @@ app.get('/api/forms', (req, res) => {
     submissionCount: db.submissions.filter(s => s.formId === f.id).length
   }));
   res.json(summaries);
-});
+}));
 
 // Get a single form (full editable version, for the builder)
-app.get('/api/forms/:id', (req, res) => {
-  const db = readDb();
+app.get('/api/forms/:id', asyncRoute(async (req, res) => {
+  const db = await readDb();
   const form = db.forms.find(f => f.id === req.params.id);
   if (!form) return res.status(404).json({ error: 'Form not found' });
   res.json(form);
-});
+}));
 
 // Public-safe version of a form (for the shareable link, no internal metadata needed beyond fields)
-app.get('/api/forms/:id/public', (req, res) => {
-  const db = readDb();
+app.get('/api/forms/:id/public', asyncRoute(async (req, res) => {
+  const db = await readDb();
   const form = db.forms.find(f => f.id === req.params.id);
   if (!form) return res.status(404).json({ error: 'Form not found' });
   res.json({
@@ -218,15 +228,15 @@ app.get('/api/forms/:id/public', (req, res) => {
     description: form.description,
     fields: form.fields
   });
-});
+}));
 
 // Create a new form
-app.post('/api/forms', (req, res) => {
+app.post('/api/forms', asyncRoute(async (req, res) => {
   const { title, description, fields } = req.body;
   if (!title || typeof title !== 'string') {
     return res.status(400).json({ error: 'Title is required' });
   }
-  const db = readDb();
+  const db = await readDb();
   const now = new Date().toISOString();
   const form = {
     id: genId(),
@@ -237,13 +247,13 @@ app.post('/api/forms', (req, res) => {
     updatedAt: now
   };
   db.forms.push(form);
-  writeDb(db);
+  await writeDb(db);
   res.status(201).json(form);
-});
+}));
 
 // Duplicate an existing form (same fields/description, new id, new title)
-app.post('/api/forms/:id/duplicate', (req, res) => {
-  const db = readDb();
+app.post('/api/forms/:id/duplicate', asyncRoute(async (req, res) => {
+  const db = await readDb();
   const source = db.forms.find(f => f.id === req.params.id);
   if (!source) return res.status(404).json({ error: 'Form not found' });
 
@@ -258,13 +268,13 @@ app.post('/api/forms/:id/duplicate', (req, res) => {
     updatedAt: now
   };
   db.forms.push(copy);
-  writeDb(db);
+  await writeDb(db);
   res.status(201).json(copy);
-});
+}));
 
 // Update an existing form
-app.put('/api/forms/:id', (req, res) => {
-  const db = readDb();
+app.put('/api/forms/:id', asyncRoute(async (req, res) => {
+  const db = await readDb();
   const idx = db.forms.findIndex(f => f.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Form not found' });
 
@@ -276,27 +286,27 @@ app.put('/api/forms/:id', (req, res) => {
   form.updatedAt = new Date().toISOString();
 
   db.forms[idx] = form;
-  writeDb(db);
+  await writeDb(db);
   res.json(form);
-});
+}));
 
 // Delete a form (and its submissions)
-app.delete('/api/forms/:id', (req, res) => {
-  const db = readDb();
+app.delete('/api/forms/:id', asyncRoute(async (req, res) => {
+  const db = await readDb();
   const exists = db.forms.some(f => f.id === req.params.id);
   if (!exists) return res.status(404).json({ error: 'Form not found' });
 
   db.forms = db.forms.filter(f => f.id !== req.params.id);
   db.submissions = db.submissions.filter(s => s.formId !== req.params.id);
-  writeDb(db);
+  await writeDb(db);
   res.status(204).end();
-});
+}));
 
 // ---------- Submissions API ----------
 
 // Submit a response to a form (public endpoint used by the shared form page)
-app.post('/api/forms/:id/submit', (req, res) => {
-  const db = readDb();
+app.post('/api/forms/:id/submit', asyncRoute(async (req, res) => {
+  const db = await readDb();
   const form = db.forms.find(f => f.id === req.params.id);
   if (!form) return res.status(404).json({ error: 'Form not found' });
 
@@ -314,27 +324,27 @@ app.post('/api/forms/:id/submit', (req, res) => {
     submittedAt: new Date().toISOString()
   };
   db.submissions.push(submission);
-  writeDb(db);
+  await writeDb(db);
   res.status(201).json(submission);
 
   // Fire-and-forget: don't let email issues affect the applicant's experience.
   sendSubmissionEmail(form, submission);
-});
+}));
 
 // List submissions for a form
-app.get('/api/forms/:id/submissions', (req, res) => {
-  const db = readDb();
+app.get('/api/forms/:id/submissions', asyncRoute(async (req, res) => {
+  const db = await readDb();
   const form = db.forms.find(f => f.id === req.params.id);
   if (!form) return res.status(404).json({ error: 'Form not found' });
   const submissions = db.submissions
     .filter(s => s.formId === req.params.id)
     .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
   res.json({ form, submissions });
-});
+}));
 
 // Export submissions as CSV
-app.get('/api/forms/:id/submissions/export', (req, res) => {
-  const db = readDb();
+app.get('/api/forms/:id/submissions/export', asyncRoute(async (req, res) => {
+  const db = await readDb();
   const form = db.forms.find(f => f.id === req.params.id);
   if (!form) return res.status(404).json({ error: 'Form not found' });
   const submissions = db.submissions.filter(s => s.formId === req.params.id);
@@ -356,17 +366,17 @@ app.get('/api/forms/:id/submissions/export', (req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename="${form.title.replace(/[^a-z0-9]+/gi, '_')}_submissions.csv"`);
   res.send(csv);
-});
+}));
 
 // Delete a single submission
-app.delete('/api/forms/:formId/submissions/:subId', (req, res) => {
-  const db = readDb();
+app.delete('/api/forms/:formId/submissions/:subId', asyncRoute(async (req, res) => {
+  const db = await readDb();
   const before = db.submissions.length;
   db.submissions = db.submissions.filter(s => !(s.formId === req.params.formId && s.id === req.params.subId));
   if (db.submissions.length === before) return res.status(404).json({ error: 'Submission not found' });
-  writeDb(db);
+  await writeDb(db);
   res.status(204).end();
-});
+}));
 
 // ---------- Pages ----------
 
@@ -375,6 +385,17 @@ app.get('/f/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'form.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`FormForge running at http://localhost:${PORT}`);
+// ---------- Startup ----------
+
+async function start() {
+  console.log(`Storage backend: ${useMongo ? 'MongoDB (persistent)' : 'local JSON file (data/db.json)'}`);
+  await ensureSeedTemplate();
+  app.listen(PORT, () => {
+    console.log(`FormForge running at http://localhost:${PORT}`);
+  });
+}
+
+start().catch(err => {
+  console.error('Failed to start:', err);
+  process.exit(1);
 });
