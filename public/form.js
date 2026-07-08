@@ -15,13 +15,32 @@ async function init() {
   const card = document.getElementById('form-card');
   const formId = getFormId();
 
-  const res = await fetch(`/api/forms/${formId}/public`);
-  if (!res.ok) {
-    card.innerHTML = '<p>This form does not exist or was removed.</p>';
-    return;
+  // Free hosting puts the app to sleep after inactivity - the first visitor after
+  // that has to wait ~30-60s while it wakes up. Explain that instead of leaving
+  // people staring at a bare "Loading..." wondering if the link is broken.
+  const slowNotice = setTimeout(() => {
+    card.innerHTML = `
+      <p>Loading form&hellip;</p>
+      <p style="color:var(--muted); font-size:14px;">This is taking longer than usual - if this link hasn't been used in a while, the form can take up to a minute to wake up. It'll load automatically, no need to refresh.</p>
+    `;
+  }, 4000);
+
+  try {
+    const res = await fetch(`/api/forms/${formId}/public`);
+    clearTimeout(slowNotice);
+    if (!res.ok) {
+      card.innerHTML = '<p>This form does not exist or was removed.</p>';
+      return;
+    }
+    const form = await res.json();
+    renderForm(form, card);
+  } catch (err) {
+    clearTimeout(slowNotice);
+    card.innerHTML = `
+      <p>Couldn't load this form.</p>
+      <p style="color:var(--muted); font-size:14px;">Please check your internet connection and reload the page. If this keeps happening, contact whoever sent you this link.</p>
+    `;
   }
-  const form = await res.json();
-  renderForm(form, card);
 }
 
 function renderForm(form, card) {
