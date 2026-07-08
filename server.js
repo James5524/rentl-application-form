@@ -162,6 +162,26 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const genId = () => crypto.randomBytes(6).toString('hex');
 
+// If there are no forms at all (fresh install, or free-tier storage got wiped
+// on restart), recreate the RENTL Application Template so it's always there.
+function ensureSeedTemplate() {
+  const db = readDb();
+  if (db.forms.length > 0) return;
+  const template = require('./template-data');
+  const now = new Date().toISOString();
+  db.forms.push({
+    id: genId(),
+    title: template.title,
+    description: '',
+    fields: template.fields,
+    createdAt: now,
+    updatedAt: now
+  });
+  writeDb(db);
+  console.log(`Seeded default form: "${template.title}"`);
+}
+ensureSeedTemplate();
+
 // ---------- Forms API ----------
 
 // List all forms (summary only)
