@@ -4,13 +4,13 @@
   "description": "A self-hosted, local form builder (Jotform-style) - build forms, share a link, collect responses.",
   "main": "server.js",
   "engines": {
-    "node": ">=18"
+    "node": "20.x"
   },
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.19.2",
-    "mongodb": "^6.9.0"
+    "mongodb": "^6.10.0"
   }
 }
