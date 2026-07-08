@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Form</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body { display: flex; justify-content: center; padding: 40px 16px; }
+  .form-wrap { width: 100%; max-width: 620px; }
+  .form-card-public {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    box-shadow: var(--shadow);
+  }
+  .radio-check-option { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-weight: normal; }
+  .error-text { color: var(--danger); font-size: 13px; margin-top: 10px; }
+  .thankyou { text-align: center; padding: 40px 20px; }
+  .repeater-block {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 12px;
+    background: #fafbff;
+  }
+  .repeater-block-title {
+    font-weight: 700;
+    color: var(--primary-dark);
+    margin-bottom: 10px;
+  }
+</style>
+</head>
+<body>
+  <div class="form-wrap">
+    <div id="form-card" class="form-card-public">Loading form&hellip;</div>
+  </div>
+  <script src="form.js"></script>
+</body>
+</html>

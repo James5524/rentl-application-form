@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FormForge</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="dot"></span> FormForge</div>
+  <div id="topbar-actions"></div>
+</header>
+
+<main>
+  <!-- ===== Forms list view ===== -->
+  <section id="view-list">
+    <div class="list-header">
+      <h1>Your forms</h1>
+      <button id="btn-new-form">+ New form</button>
+    </div>
+    <div id="forms-grid" class="forms-grid"></div>
+    <div id="empty-state" class="empty-state hidden">
+      <p>No forms yet. Click "New form" to build your first one.</p>
+    </div>
+  </section>
+
+  <!-- ===== Builder view ===== -->
+  <section id="view-builder" class="hidden">
+    <div class="top-actions">
+      <div class="left">
+        <button class="secondary" id="btn-back-list">&larr; Back</button>
+      </div>
+      <div>
+        <button class="secondary" id="btn-view-submissions">View submissions</button>
+        <button id="btn-save-form">Save form</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:20px;">
+      <label class="field-label">Form title</label>
+      <input type="text" id="form-title" placeholder="Untitled form">
+      <div style="height:10px;"></div>
+      <label class="field-label">Description (optional)</label>
+      <textarea id="form-description" placeholder="Tell people what this form is for"></textarea>
+    </div>
+
+    <div class="builder-layout">
+      <div class="panel">
+        <h2>Fields</h2>
+        <div id="fields-list"></div>
+        <div class="add-field-row">
+          <button class="secondary small" data-add="text">+ Text</button>
+          <button class="secondary small" data-add="textarea">+ Paragraph</button>
+          <button class="secondary small" data-add="email">+ Email</button>
+          <button class="secondary small" data-add="number">+ Number</button>
+          <button class="secondary small" data-add="date">+ Date</button>
+          <button class="secondary small" data-add="select">+ Dropdown</button>
+          <button class="secondary small" data-add="radio">+ Multiple choice</button>
+          <button class="secondary small" data-add="checkbox">+ Checkboxes</button>
+          <button class="secondary small" id="btn-add-heading">+ Section heading</button>
+          <button class="secondary small" id="btn-add-repeater">+ Repeating group (per person)</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Live preview</h2>
+        <div id="form-preview"></div>
+      </div>
+    </div>
+
+    <div id="share-box" class="share-box hidden">
+      Shareable link: <code id="share-link"></code>
+      <button class="secondary small" id="btn-copy-link">Copy</button>
+      <button class="secondary small" id="btn-open-link">Open</button>
+    </div>
+  </section>
+
+  <!-- ===== Submissions view ===== -->
+  <section id="view-submissions" class="hidden">
+    <div class="top-actions">
+      <div class="left">
+        <button class="secondary" id="btn-back-builder">&larr; Back to builder</button>
+        <h1 id="submissions-title" style="font-size:18px; margin:0;"></h1>
+      </div>
+      <a id="btn-export-csv" href="#"><button class="secondary">Export CSV</button></a>
+    </div>
+    <div class="panel">
+      <div id="submissions-table-wrap"></div>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="builder.js"></script>
+</body>
+</html>

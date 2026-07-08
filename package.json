@@ -1,0 +1,15 @@
+{
+  "name": "formforge",
+  "version": "1.0.0",
+  "description": "A self-hosted, local form builder (Jotform-style) - build forms, share a link, collect responses.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
