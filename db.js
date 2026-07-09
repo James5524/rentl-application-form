@@ -44,8 +44,24 @@ let mongoDbPromise = null;
 function getMongoDb() {
   if (!mongoDbPromise) {
     const { MongoClient } = require('mongodb');
+    // Redact the password before ever logging anything about the connection string.
+    const redacted = MONGODB_URI.replace(/:\/\/([^:]+):[^@]+@/, '://$1:****@');
+    console.log(`[mongo] Connecting using: ${redacted}`);
     const client = new MongoClient(MONGODB_URI);
-    mongoDbPromise = client.connect().then(() => client.db('formforge'));
+    mongoDbPromise = client.connect().then(async (connectedClient) => {
+      const db = connectedClient.db('formforge');
+      console.log(`[mongo] Connected. Using database "${db.databaseName}" on cluster "${connectedClient.options.srvHost || 'unknown'}"`);
+      try {
+        const allDbs = await connectedClient.db().admin().listDatabases();
+        console.log(`[mongo] Databases visible to this connection: ${allDbs.databases.map(d => d.name).join(', ')}`);
+      } catch (listErr) {
+        console.log(`[mongo] (couldn't list databases - not critical: ${listErr.message})`);
+      }
+      return db;
+    }).catch((err) => {
+      mongoDbPromise = null; // allow a retry on the next call instead of caching a rejected promise forever
+      throw err;
+    });
   }
   return mongoDbPromise;
 }
@@ -54,6 +70,7 @@ async function readMongoDb() {
   const db = await getMongoDb();
   const forms = await db.collection('forms').find({}).toArray();
   const submissions = await db.collection('submissions').find({}).toArray();
+  console.log(`[mongo] read: ${forms.length} form(s), ${submissions.length} submission(s)`);
   // Strip Mongo's internal _id so the shape matches what the rest of the app expects.
   return {
     forms: forms.map(({ _id, ...f }) => f),
@@ -69,6 +86,8 @@ async function writeMongoDb(data) {
   if (data.forms.length) await db.collection('forms').insertMany(data.forms);
   await db.collection('submissions').deleteMany({});
   if (data.submissions.length) await db.collection('submissions').insertMany(data.submissions);
+  const formsCount = await db.collection('forms').countDocuments();
+  console.log(`[mongo] wrote: ${data.forms.length} form(s), ${data.submissions.length} submission(s) - verified ${formsCount} form(s) now in collection`);
 }
 
 // ---------- Public API (always async now, whichever backend is active) ----------
