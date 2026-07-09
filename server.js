@@ -389,7 +389,14 @@ app.get('/f/:id', (req, res) => {
 
 async function start() {
   console.log(`Storage backend: ${useMongo ? 'MongoDB (persistent)' : 'local JSON file (data/db.json)'}`);
-  await ensureSeedTemplate();
+  try {
+    await ensureSeedTemplate();
+  } catch (err) {
+    // Don't let a slow/flaky database connection at boot crash the whole app and
+    // trigger a restart loop - log it and start anyway. Individual requests will
+    // retry the connection themselves (see asyncRoute's error handling below).
+    console.error('Could not seed default template at startup (will retry on first request):', err.message);
+  }
   app.listen(PORT, () => {
     console.log(`FormForge running at http://localhost:${PORT}`);
   });

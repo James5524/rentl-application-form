@@ -40,26 +40,51 @@ function writeLocalDb(data) {
 // ---------- MongoDB-backed storage ----------
 
 let mongoDbPromise = null;
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function connectOnce() {
+  const { MongoClient } = require('mongodb');
+  const client = new MongoClient(MONGODB_URI, {
+    // Fail fast and predictably instead of hanging indefinitely - Render's
+    // network path to this free cluster has been intermittently slow/flaky.
+    serverSelectionTimeoutMS: 15000,
+    connectTimeoutMS: 15000,
+    socketTimeoutMS: 20000,
+    // Force IPv4. Mixed IPv4/IPv6 routing between some hosts and Atlas has
+    // been a known cause of exactly the "tlsv1 alert internal error" seen here.
+    family: 4
+  });
+  const connectedClient = await client.connect();
+  const db = connectedClient.db('formforge');
+  console.log(`[mongo] Connected. Using database "${db.databaseName}" on cluster "${connectedClient.options.srvHost || 'unknown'}"`);
+  try {
+    const allDbs = await connectedClient.db().admin().listDatabases();
+    console.log(`[mongo] Databases visible to this connection: ${allDbs.databases.map(d => d.name).join(', ')}`);
+  } catch (listErr) {
+    console.log(`[mongo] (couldn't list databases - not critical: ${listErr.message})`);
+  }
+  return db;
+}
 
 function getMongoDb() {
   if (!mongoDbPromise) {
-    const { MongoClient } = require('mongodb');
-    // Redact the password before ever logging anything about the connection string.
     const redacted = MONGODB_URI.replace(/:\/\/([^:]+):[^@]+@/, '://$1:****@');
-    console.log(`[mongo] Connecting using: ${redacted}`);
-    const client = new MongoClient(MONGODB_URI);
-    mongoDbPromise = client.connect().then(async (connectedClient) => {
-      const db = connectedClient.db('formforge');
-      console.log(`[mongo] Connected. Using database "${db.databaseName}" on cluster "${connectedClient.options.srvHost || 'unknown'}"`);
-      try {
-        const allDbs = await connectedClient.db().admin().listDatabases();
-        console.log(`[mongo] Databases visible to this connection: ${allDbs.databases.map(d => d.name).join(', ')}`);
-      } catch (listErr) {
-        console.log(`[mongo] (couldn't list databases - not critical: ${listErr.message})`);
+    const ATTEMPTS = 3;
+    mongoDbPromise = (async () => {
+      let lastErr;
+      for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+        console.log(`[mongo] Connecting (attempt ${attempt}/${ATTEMPTS}) using: ${redacted}`);
+        try {
+          return await connectOnce();
+        } catch (err) {
+          lastErr = err;
+          console.log(`[mongo] Attempt ${attempt} failed: ${err.message}`);
+          if (attempt < ATTEMPTS) await sleep(2000);
+        }
       }
-      return db;
-    }).catch((err) => {
-      mongoDbPromise = null; // allow a retry on the next call instead of caching a rejected promise forever
+      throw lastErr;
+    })().catch((err) => {
+      mongoDbPromise = null; // allow a fresh retry on the next call instead of caching a rejected promise forever
       throw err;
     });
   }
