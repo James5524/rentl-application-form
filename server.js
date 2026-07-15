@@ -33,22 +33,75 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL;
 const NOTIFY_FROM = process.env.NOTIFY_FROM || 'FormForge <onboarding@resend.dev>';
 
+// Builds a clean, Jotform-style notification email: a colored title bar, then
+// one label/value block per question, with repeater fields grouped under a
+// pill-style "Adult 1" / "Adult 2" heading - only for adults actually
+// submitted (not padded out to the field's max).
+function buildSubmissionEmailHtml(form, submission) {
+  const data = submission.data || {};
+
+  const escVal = (v) => {
+    const s = (v === undefined || v === null) ? '' : String(v).trim();
+    return s ? escapeHtml(s) : '<span style="color:#9ca3af;">Not provided</span>';
+  };
+
+  const fieldRow = (field, value) => `
+    <tr>
+      <td style="padding:10px 20px;border-bottom:1px solid #eef0f5;">
+        <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">${escapeHtml(field.label)}</div>
+        <div style="font-size:14px;color:#1f2430;line-height:1.4;">${escVal(value)}</div>
+      </td>
+    </tr>`;
+
+  const sectionRow = (label) => `
+    <tr>
+      <td style="padding:22px 20px 8px 20px;">
+        <div style="display:inline-block;font-size:13px;font-weight:700;color:#4338ca;background:#eef2ff;padding:4px 10px;border-radius:999px;">${escapeHtml(label)}</div>
+      </td>
+    </tr>`;
+
+  const rows = [];
+  for (const field of form.fields) {
+    if (field.type === 'heading') continue;
+    if (field.type === 'repeater') {
+      const arr = Array.isArray(data[field.id]) ? data[field.id] : [];
+      arr.forEach((item, idx) => {
+        rows.push(sectionRow(`${field.itemLabel || 'Person'} ${idx + 1}`));
+        (field.itemFields || []).forEach(itemField => {
+          if (itemField.type === 'heading') return;
+          rows.push(fieldRow(itemField, (item || {})[itemField.id]));
+        });
+      });
+    } else {
+      rows.push(fieldRow(field, data[field.id]));
+    }
+  }
+
+  return `
+  <div style="background:#f5f6fa;padding:24px;">
+    <table role="presentation" width="100%" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e2e5ec;border-collapse:collapse;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+      <tr>
+        <td style="background:#4338ca;color:#ffffff;padding:18px 20px;">
+          <div style="font-size:12px;opacity:.8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">New submission</div>
+          <div style="font-size:18px;font-weight:700;">${escapeHtml(form.title)}</div>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:10px 20px 0 20px;font-size:12px;color:#6b7280;">
+          Submitted ${new Date(submission.submittedAt).toLocaleString('en-GB')}
+        </td>
+      </tr>
+      ${rows.join('')}
+    </table>
+  </div>`;
+}
+
 async function sendSubmissionEmail(form, submission) {
   if (!RESEND_API_KEY || !NOTIFY_EMAIL) {
     console.warn('Email notifications skipped: set RESEND_API_KEY and NOTIFY_EMAIL to enable them.');
     return;
   }
-  const columns = getColumns(form.fields);
-  const rowValues = getRowValues(form.fields, submission.data);
-  const rows = columns.map(c => {
-    return `<tr><td style="padding:4px 10px;color:#6b7280;">${escapeHtml(c.label)}</td><td style="padding:4px 10px;">${escapeHtml(rowValues[c.key] ?? '')}</td></tr>`;
-  }).join('');
-
-  const html = `
-    <h2>New submission: ${escapeHtml(form.title)}</h2>
-    <p style="color:#6b7280;">Submitted ${new Date(submission.submittedAt).toLocaleString()}</p>
-    <table>${rows}</table>
-  `;
+  const html = buildSubmissionEmailHtml(form, submission);
 
   try {
     const res = await fetch('https://api.resend.com/emails', {
