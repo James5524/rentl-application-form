@@ -459,10 +459,27 @@ app.delete('/api/forms/:formId/submissions/:subId', asyncRoute(async (req, res) 
 
 // ---------- Pages ----------
 
-// Public shareable form page
-app.get('/f/:id', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'form.html'));
-});
+// Public shareable form page. Fills in the page title and link-preview
+// (Open Graph / Twitter card) tags with the actual form's name, so sharing
+// the link in WhatsApp/iMessage/Slack/etc. shows a proper preview card with
+// the RENTL logo and the specific property name - preview scanners don't run
+// the page's JavaScript, so this has to happen server-side before sending.
+app.get('/f/:id', asyncRoute(async (req, res) => {
+  const db = await readDb();
+  const form = db.forms.find(f => f.id === req.params.id);
+  const title = form ? form.title : 'Application form';
+  const desc = (form && form.description) ? form.description : 'Complete this application form online.';
+  const imageUrl = `${req.protocol}://${req.get('host')}/logo.png`;
+
+  let html = fs.readFileSync(path.join(__dirname, 'public', 'form.html'), 'utf-8');
+  html = html
+    .split('__OG_TITLE__').join(escapeHtml(title))
+    .split('__OG_DESC__').join(escapeHtml(desc))
+    .split('__OG_IMAGE__').join(imageUrl);
+
+  res.set('Content-Type', 'text/html');
+  res.send(html);
+}));
 
 // ---------- Startup ----------
 
