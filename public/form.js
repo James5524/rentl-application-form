@@ -90,15 +90,14 @@ function buildFieldBlock(field) {
 
 function buildHeadingBlock(field) {
   const wrap = document.createElement('div');
-  wrap.className = 'preview-field';
+  wrap.className = 'preview-field section-block';
   const h = document.createElement('h3');
-  h.style.marginBottom = '4px';
+  h.className = 'section-title';
   h.textContent = field.label;
   wrap.appendChild(h);
   if (field.body) {
     const p = document.createElement('p');
-    p.style.color = 'var(--muted)';
-    p.style.marginTop = '0';
+    p.className = 'section-body';
     p.textContent = field.body;
     wrap.appendChild(p);
   }
