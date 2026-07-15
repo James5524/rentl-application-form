@@ -2,7 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
-const { readDb, writeDb, useMongo } = require('./db');
+const { readDb, writeDb, useUpstash } = require('./db');
 
 // Load simple KEY=VALUE pairs from a .env file, if present, without adding a dependency.
 function loadEnvFile() {
@@ -388,7 +388,7 @@ app.get('/f/:id', (req, res) => {
 // ---------- Startup ----------
 
 async function start() {
-  console.log(`Storage backend: ${useMongo ? 'MongoDB (persistent)' : 'local JSON file (data/db.json)'}`);
+  console.log(`Storage backend: ${useUpstash ? 'Upstash Redis (persistent)' : 'local JSON file (data/db.json)'}`);
   try {
     await ensureSeedTemplate();
   } catch (err) {

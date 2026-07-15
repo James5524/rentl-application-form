@@ -1,14 +1,21 @@
 // Storage layer. Two modes:
-//  - MONGODB_URI set (e.g. on Render): reads/writes go to a free MongoDB Atlas
-//    cluster, so data survives restarts/redeploys - unlike Render's own disk.
-//  - MONGODB_URI not set (local dev): falls back to a plain data/db.json file,
-//    so you don't need a database just to run this on your own machine.
+//  - UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN set (e.g. on Render): reads/writes
+//    go to a free Upstash Redis database over a plain HTTPS REST API, so data survives
+//    restarts/redeploys - unlike Render's own disk. (We tried MongoDB Atlas first, but its
+//    native TLS socket connection was consistently incompatible with Render's network -
+//    Upstash's REST API uses ordinary HTTPS instead, the same way the Resend email
+//    integration already does, sidestepping that whole problem.)
+//  - Neither set (local dev): falls back to a plain data/db.json file, so you don't need
+//    an external database just to run this on your own machine.
 
 const fs = require('fs');
 const path = require('path');
 
-const MONGODB_URI = process.env.MONGODB_URI;
-const useMongo = !!MONGODB_URI;
+const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+const useUpstash = !!(UPSTASH_URL && UPSTASH_TOKEN);
+
+const REDIS_KEY = 'formforge:db';
 
 // ---------- Local JSON file fallback ----------
 
@@ -37,92 +44,55 @@ function writeLocalDb(data) {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
-// ---------- MongoDB-backed storage ----------
+// ---------- Upstash Redis-backed storage (plain HTTPS REST calls) ----------
 
-let mongoDbPromise = null;
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-async function connectOnce() {
-  const { MongoClient } = require('mongodb');
-  const client = new MongoClient(MONGODB_URI, {
-    // Fail fast and predictably instead of hanging indefinitely - Render's
-    // network path to this free cluster has been intermittently slow/flaky.
-    serverSelectionTimeoutMS: 15000,
-    connectTimeoutMS: 15000,
-    socketTimeoutMS: 20000,
-    // Force IPv4. Mixed IPv4/IPv6 routing between some hosts and Atlas has
-    // been a known cause of exactly the "tlsv1 alert internal error" seen here.
-    family: 4
+async function upstashCommand(command) {
+  const res = await fetch(UPSTASH_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${UPSTASH_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(command)
   });
-  const connectedClient = await client.connect();
-  const db = connectedClient.db('formforge');
-  console.log(`[mongo] Connected. Using database "${db.databaseName}" on cluster "${connectedClient.options.srvHost || 'unknown'}"`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Upstash request failed: ${res.status} ${body}`);
+  }
+  const json = await res.json();
+  if (json.error) throw new Error(`Upstash error: ${json.error}`);
+  return json.result;
+}
+
+async function readUpstashDb() {
+  const raw = await upstashCommand(['GET', REDIS_KEY]);
+  if (!raw) {
+    console.log('[upstash] No data yet - starting fresh');
+    return { forms: [], submissions: [] };
+  }
   try {
-    const allDbs = await connectedClient.db().admin().listDatabases();
-    console.log(`[mongo] Databases visible to this connection: ${allDbs.databases.map(d => d.name).join(', ')}`);
-  } catch (listErr) {
-    console.log(`[mongo] (couldn't list databases - not critical: ${listErr.message})`);
+    const data = JSON.parse(raw);
+    console.log(`[upstash] read: ${data.forms.length} form(s), ${data.submissions.length} submission(s)`);
+    return data;
+  } catch (e) {
+    console.error('[upstash] Stored data was not valid JSON, starting fresh:', e.message);
+    return { forms: [], submissions: [] };
   }
-  return db;
 }
 
-function getMongoDb() {
-  if (!mongoDbPromise) {
-    const redacted = MONGODB_URI.replace(/:\/\/([^:]+):[^@]+@/, '://$1:****@');
-    const ATTEMPTS = 3;
-    mongoDbPromise = (async () => {
-      let lastErr;
-      for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-        console.log(`[mongo] Connecting (attempt ${attempt}/${ATTEMPTS}) using: ${redacted}`);
-        try {
-          return await connectOnce();
-        } catch (err) {
-          lastErr = err;
-          console.log(`[mongo] Attempt ${attempt} failed: ${err.message}`);
-          if (attempt < ATTEMPTS) await sleep(2000);
-        }
-      }
-      throw lastErr;
-    })().catch((err) => {
-      mongoDbPromise = null; // allow a fresh retry on the next call instead of caching a rejected promise forever
-      throw err;
-    });
-  }
-  return mongoDbPromise;
+async function writeUpstashDb(data) {
+  await upstashCommand(['SET', REDIS_KEY, JSON.stringify(data)]);
+  console.log(`[upstash] wrote: ${data.forms.length} form(s), ${data.submissions.length} submission(s)`);
 }
 
-async function readMongoDb() {
-  const db = await getMongoDb();
-  const forms = await db.collection('forms').find({}).toArray();
-  const submissions = await db.collection('submissions').find({}).toArray();
-  console.log(`[mongo] read: ${forms.length} form(s), ${submissions.length} submission(s)`);
-  // Strip Mongo's internal _id so the shape matches what the rest of the app expects.
-  return {
-    forms: forms.map(({ _id, ...f }) => f),
-    submissions: submissions.map(({ _id, ...s }) => s)
-  };
-}
-
-async function writeMongoDb(data) {
-  const db = await getMongoDb();
-  // The app always reads/writes the whole collection at once (small dataset,
-  // simplicity over efficiency), so mirror that here with a full replace.
-  await db.collection('forms').deleteMany({});
-  if (data.forms.length) await db.collection('forms').insertMany(data.forms);
-  await db.collection('submissions').deleteMany({});
-  if (data.submissions.length) await db.collection('submissions').insertMany(data.submissions);
-  const formsCount = await db.collection('forms').countDocuments();
-  console.log(`[mongo] wrote: ${data.forms.length} form(s), ${data.submissions.length} submission(s) - verified ${formsCount} form(s) now in collection`);
-}
-
-// ---------- Public API (always async now, whichever backend is active) ----------
+// ---------- Public API ----------
 
 async function readDb() {
-  return useMongo ? readMongoDb() : readLocalDb();
+  return useUpstash ? readUpstashDb() : readLocalDb();
 }
 
 async function writeDb(data) {
-  return useMongo ? writeMongoDb(data) : writeLocalDb(data);
+  return useUpstash ? writeUpstashDb(data) : writeLocalDb(data);
 }
 
-module.exports = { readDb, writeDb, useMongo };
+module.exports = { readDb, writeDb, useUpstash };

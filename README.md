@@ -46,22 +46,19 @@ Running locally only works while your computer is on. To get a link that works f
 
 **Important:** Render's free tier wipes the app's file storage whenever it goes idle and restarts (after ~15 minutes of no traffic) — this deletes every stored form, including your duplicated per-property links, not just submissions. That's what part 4 solves, for free, without needing a paid plan.
 
-## 4. Make your data permanent (free, via MongoDB Atlas)
+## 4. Make your data permanent (free, via Upstash Redis)
 
-The app can store everything in a free MongoDB Atlas database instead of Render's own disk, so your duplicated property forms, their links, and all submissions survive restarts indefinitely.
+The app can store everything in a free Upstash Redis database instead of Render's own disk, so your duplicated property forms, their links, and all submissions survive restarts indefinitely. (We tried MongoDB Atlas first, but its connection method turned out to be incompatible with Render's network. Upstash connects over plain HTTPS instead - the same method that already works fine for the email notifications - which avoids that problem entirely.)
 
-1. Go to [mongodb.com/cloud/atlas](https://mongodb.com/cloud/atlas/register) and sign up free (no credit card needed).
-2. Create a free cluster: choose the **M0 Free** tier, pick any region, and click **Create**.
-3. When prompted to create a database user, set a username and password (click **Autogenerate Secure Password** and copy it somewhere safe) — this logs the app into your database, not you into a website, so it's fine to autogenerate.
-4. Under **Network Access**, click **Add IP Address** → **Allow Access from Anywhere** (`0.0.0.0/0`). This is fine here since the connection still requires the username/password from step 3.
-5. Click **Connect** on your cluster → **Drivers** → copy the connection string, which looks like `mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/`. Replace `<username>` and `<password>` with what you set in step 3.
-6. In Render, go to your service → **Environment** → **Add Environment Variable**:
-   - Key: `MONGODB_URI` — Value: the connection string from step 5
-7. Save. Render redeploys automatically. Check the **Logs** tab for `Storage backend: MongoDB (persistent)` to confirm it's connected.
+1. Go to [upstash.com](https://upstash.com) and sign up free (no credit card needed).
+2. Click **Create Database**. Give it any name, choose the **Free** plan, pick any region, and click **Create**.
+3. On the database's page, find the **REST API** section. You'll see two values: `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` — click to reveal/copy each one.
+4. In Render, go to your service → **Environment** → **Add Environment Variable**, and add both:
+   - Key: `UPSTASH_REDIS_REST_URL` — Value: the URL from step 3
+   - Key: `UPSTASH_REDIS_REST_TOKEN` — Value: the token from step 3
+5. Save. Render redeploys automatically. Check the **Logs** tab for `Storage backend: Upstash Redis (persistent)` to confirm it's connected.
 
-One thing to know: if the database goes completely unused for 30 days, MongoDB automatically pauses it (data is kept, not deleted) and you'd need to click **Resume** in the Atlas dashboard before the form works again. Given occasional use, this is very unlikely to come up, but worth knowing.
-
-*(Running locally instead? Copy `.env.example` to `.env` and fill in `MONGODB_URI` the same way — or just leave it blank, since local runs already use a plain file and don't need this.)*
+*(Running locally instead? Copy `.env.example` to `.env` and fill in both Upstash values the same way — or just leave them blank, since local runs already use a plain file and don't need this.)*
 
 ## 5. Get emailed a copy of every application too
 
@@ -80,7 +77,7 @@ You don't need to verify a domain in Resend for this — sending to your own acc
 
 ## Data storage
 
-Locally (no `MONGODB_URI` set), everything lives in `data/db.json`. Once `MONGODB_URI` is set (see part 4), all reads/writes go to your free MongoDB Atlas database instead, and that file is unused.
+Locally (no Upstash variables set), everything lives in `data/db.json`. Once those are set (see part 4), all reads/writes go to your free Upstash Redis database instead, and that file is unused.
 
 The responses table and CSV export automatically expand each adult into its own set of columns (e.g. "Adult 1 - Full Name", "Adult 2 - Full Name" …), so multi-person applications open cleanly in Excel/Sheets.
 
