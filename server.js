@@ -96,12 +96,37 @@ function buildSubmissionEmailHtml(form, submission) {
   </div>`;
 }
 
+// Finds the applicant's own email address in their submitted data, so replying
+// to the notification email goes straight to them instead of nowhere/no-one.
+// Looks for a top-level "email" type field first, then the first "email" type
+// field inside a repeater (e.g. the first adult's email address).
+function findApplicantEmail(form, data) {
+  for (const field of form.fields) {
+    if (field.type === 'email' && data[field.id]) {
+      return data[field.id];
+    }
+  }
+  for (const field of form.fields) {
+    if (field.type === 'repeater') {
+      const arr = Array.isArray(data[field.id]) ? data[field.id] : [];
+      const emailField = (field.itemFields || []).find(f => f.type === 'email');
+      if (emailField) {
+        for (const item of arr) {
+          if (item && item[emailField.id]) return item[emailField.id];
+        }
+      }
+    }
+  }
+  return null;
+}
+
 async function sendSubmissionEmail(form, submission) {
   if (!RESEND_API_KEY || !NOTIFY_EMAIL) {
     console.warn('Email notifications skipped: set RESEND_API_KEY and NOTIFY_EMAIL to enable them.');
     return;
   }
   const html = buildSubmissionEmailHtml(form, submission);
+  const applicantEmail = findApplicantEmail(form, submission.data || {});
 
   try {
     const res = await fetch('https://api.resend.com/emails', {
@@ -114,7 +139,8 @@ async function sendSubmissionEmail(form, submission) {
         from: NOTIFY_FROM,
         to: [NOTIFY_EMAIL],
         subject: `New application: ${form.title}`,
-        html
+        html,
+        ...(applicantEmail ? { reply_to: [applicantEmail] } : {})
       })
     });
     if (!res.ok) {
