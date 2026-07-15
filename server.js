@@ -25,6 +25,7 @@ function loadEnvFile() {
 loadEnvFile();
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 3210;
 
 // Email notifications (optional): set RESEND_API_KEY and NOTIFY_EMAIL to get an
