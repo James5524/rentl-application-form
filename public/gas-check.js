@@ -15,7 +15,7 @@ const APPLIANCE_FIELDS = [
   ['make', 'Appliance make', 'text'],
   ['model', 'Appliance model', 'text'],
   ['flueType', 'Type of flue/outlet', 'select', FLUE_TYPES],
-  ['pressure', 'Working pressure (mbar) or heat input (kW/Btu-h)', 'text'],
+  ['pressure', 'Working pressure (mbar)', 'suffix', null, 'mbar'],
   ['safetyDevices', 'Are safety devices working?', 'select', YES_NO_NA],
   ['spillage', 'Spillage test', 'select', PASS_FAIL_NA],
   ['smokePellet', 'Smoke pellet (flue flow) test', 'select', PASS_FAIL_NA],
