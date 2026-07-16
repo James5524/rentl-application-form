@@ -25,7 +25,9 @@ const APPLIANCE_FIELDS = [
   ['landlordOwned', 'Is this appliance owned by the landlord?', 'select', YES_NO],
   ['ventilation', 'Is there adequate ventilation?', 'select', YES_NO],
   ['serviced', 'Has the appliance been serviced?', 'select', YES_NO],
-  ['combustionRatio', 'Combustion performance reading (CO:CO2 ratio / CO2% / CO ppm)', 'text'],
+  ['coco2Ratio', 'CO:CO2 ratio', 'text'],
+  ['co2Percent', 'CO2 %', 'suffix', null, '%'],
+  ['coPpm', 'CO ppm', 'suffix', null, 'ppm'],
   ['safeToUse', 'Is this appliance safe to use?', 'select', YES_NO],
   ['coAlarms', 'CO & smoke alarms present and tested working?', 'select', YES_NO],
   ['defects', 'Defect(s) detected (leave blank if none)', 'textarea'],
@@ -71,17 +73,25 @@ function buildApplianceBlock(index) {
   const block = el('div', { class: 'appliance-block' });
   block.appendChild(el('div', { class: 'appliance-title', text: `Appliance ${index}` }));
 
-  APPLIANCE_FIELDS.forEach(([id, label, kind, options]) => {
+  APPLIANCE_FIELDS.forEach(([id, label, kind, options, affix]) => {
     const name = `appliance_${index}_${id}`;
     let input;
     if (kind === 'select') {
       input = makeSelect(name, options, true);
+      block.appendChild(fieldWrap(label, true, input));
     } else if (kind === 'textarea') {
       input = el('textarea', { name, rows: '2' });
+      block.appendChild(fieldWrap(label, false, input));
+    } else if (kind === 'suffix') {
+      const group = el('div', { class: 'input-group' });
+      input = el('input', { type: 'text', name, required: 'required', class: 'has-suffix' });
+      group.appendChild(input);
+      group.appendChild(el('span', { class: 'input-group-suffix', text: affix }));
+      block.appendChild(fieldWrap(label, true, group));
     } else {
       input = el('input', { type: 'text', name });
+      block.appendChild(fieldWrap(label, true, input));
     }
-    block.appendChild(fieldWrap(label, kind !== 'textarea', input));
   });
 
   return block;
@@ -102,8 +112,13 @@ function buildForm() {
   propSection.appendChild(el('div', { class: 'section-title', text: 'Property details' }));
   const addr = el('textarea', { name: 'propertyAddress', rows: '2', required: 'required' });
   propSection.appendChild(fieldWrap('Property (inspection) address', true, addr));
-  const occ = el('input', { type: 'text', name: 'occupierName' });
-  propSection.appendChild(fieldWrap('Occupier / tenant name', false, occ));
+
+  const landlordGroup = el('div', { class: 'input-group' });
+  landlordGroup.appendChild(el('span', { class: 'input-group-prefix', text: 'RENTL BY JGLA LTD' }));
+  const landlordInput = el('input', { type: 'text', name: 'landlordNameSuffix', required: 'required' });
+  landlordGroup.appendChild(landlordInput);
+  propSection.appendChild(fieldWrap('Landlord name', true, landlordGroup));
+
   propSection.appendChild(fieldWrap('Is the accommodation rented?', true, makeSelect('accommodationRented', YES_NO, true)));
   form.appendChild(propSection);
 
@@ -235,9 +250,13 @@ function collectAppliances(formEl) {
   const appliances = [];
   for (let i = 1; i <= count; i++) {
     const item = {};
-    APPLIANCE_FIELDS.forEach(([id]) => {
+    APPLIANCE_FIELDS.forEach(([id, , kind, , affix]) => {
       const input = formEl.querySelector(`[name=appliance_${i}_${id}]`);
-      item[id] = input ? input.value : '';
+      let val = input ? input.value : '';
+      if (kind === 'suffix' && val.trim()) {
+        val = affix === '%' ? `${val.trim()}%` : `${val.trim()} ${affix}`;
+      }
+      item[id] = val;
     });
     appliances.push(item);
   }
@@ -262,7 +281,7 @@ async function handleSubmit(e) {
 
   const data = {
     propertyAddress: formEl.propertyAddress.value,
-    occupierName: formEl.occupierName.value,
+    landlordName: `RENTL BY JGLA LTD ${(formEl.landlordNameSuffix.value || '').trim()}`,
     accommodationRented: formEl.accommodationRented.value,
     equipotentialBonding: formEl.equipotentialBonding.value,
     pipeworkVisual: formEl.pipeworkVisual.value,
