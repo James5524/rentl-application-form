@@ -110,13 +110,15 @@ function buildForm() {
   // ---- Property details ----
   const propSection = el('div', { class: 'section-block' });
   propSection.appendChild(el('div', { class: 'section-title', text: 'Property details' }));
-  const addr = el('textarea', { name: 'propertyAddress', rows: '2', required: 'required' });
-  propSection.appendChild(fieldWrap('Property (inspection) address', true, addr));
+
+  propSection.appendChild(fieldWrap('Address line 1', true, el('input', { type: 'text', name: 'addressLine1', required: 'required' })));
+  propSection.appendChild(fieldWrap('Town / City', true, el('input', { type: 'text', name: 'addressLine2', required: 'required' })));
+  propSection.appendChild(fieldWrap('Postcode', true, el('input', { type: 'text', name: 'addressPostcode', required: 'required' })));
 
   const landlordGroup = el('div', { class: 'input-group' });
-  landlordGroup.appendChild(el('span', { class: 'input-group-prefix', text: 'RENTL BY JGLA LTD' }));
-  const landlordInput = el('input', { type: 'text', name: 'landlordNameSuffix', required: 'required' });
+  const landlordInput = el('input', { type: 'text', name: 'landlordNamePrefix', required: 'required', class: 'has-suffix' });
   landlordGroup.appendChild(landlordInput);
+  landlordGroup.appendChild(el('span', { class: 'input-group-suffix', text: 'C/O RENTL BY JGLA LTD' }));
   propSection.appendChild(fieldWrap('Landlord name', true, landlordGroup));
 
   propSection.appendChild(fieldWrap('Is the accommodation rented?', true, makeSelect('accommodationRented', YES_NO, true)));
@@ -149,6 +151,7 @@ function buildForm() {
   const engSection = el('div', { class: 'section-block' });
   engSection.appendChild(el('div', { class: 'section-title', text: 'Engineer & company details' }));
   engSection.appendChild(fieldWrap('Engineer name', true, el('input', { type: 'text', name: 'engineerName', required: 'required' })));
+  engSection.appendChild(fieldWrap('Engineer email', true, el('input', { type: 'email', name: 'engineerEmail', required: 'required' })));
   engSection.appendChild(fieldWrap('Gas Safe ID card number', true, el('input', { type: 'text', name: 'gasSafeId', required: 'required' })));
   engSection.appendChild(fieldWrap('Company name', true, el('input', { type: 'text', name: 'companyName', required: 'required' })));
   engSection.appendChild(fieldWrap('Company address', true, el('input', { type: 'text', name: 'companyAddress', required: 'required' })));
@@ -161,6 +164,19 @@ function buildForm() {
   const today = new Date().toISOString().slice(0, 10);
   const dateInput = el('input', { type: 'date', name: 'inspectionDate', value: today, required: 'required' });
   signSection.appendChild(fieldWrap('Date of inspection', true, dateInput));
+
+  // Defaults to 12 months after the inspection date, but the engineer can
+  // change it - e.g. if the landlord wants an earlier re-check.
+  const nextDueInput = el('input', { type: 'date', name: 'nextInspectionDate', required: 'required' });
+  const setDefaultNextDue = () => {
+    const base = dateInput.value ? new Date(dateInput.value) : new Date();
+    base.setMonth(base.getMonth() + 12);
+    nextDueInput.value = base.toISOString().slice(0, 10);
+  };
+  setDefaultNextDue();
+  dateInput.addEventListener('change', setDefaultNextDue);
+  signSection.appendChild(fieldWrap('Next inspection due', true, nextDueInput));
+
   signSection.appendChild(fieldWrap('Print name', true, el('input', { type: 'text', name: 'printName', required: 'required' })));
 
   const sigWrap = el('div', { class: 'field' });
@@ -280,8 +296,10 @@ async function handleSubmit(e) {
   const signatureDataUrl = canvas.toDataURL('image/png');
 
   const data = {
-    propertyAddress: formEl.propertyAddress.value,
-    landlordName: `RENTL BY JGLA LTD ${(formEl.landlordNameSuffix.value || '').trim()}`,
+    addressLine1: formEl.addressLine1.value,
+    addressLine2: formEl.addressLine2.value,
+    addressPostcode: formEl.addressPostcode.value,
+    landlordName: `${(formEl.landlordNamePrefix.value || '').trim()} C/O RENTL BY JGLA LTD`,
     accommodationRented: formEl.accommodationRented.value,
     equipotentialBonding: formEl.equipotentialBonding.value,
     pipeworkVisual: formEl.pipeworkVisual.value,
@@ -289,11 +307,13 @@ async function handleSubmit(e) {
     gasTightnessTest: formEl.gasTightnessTest.value,
     appliances: collectAppliances(formEl),
     engineerName: formEl.engineerName.value,
+    engineerEmail: formEl.engineerEmail.value,
     gasSafeId: formEl.gasSafeId.value,
     companyName: formEl.companyName.value,
     companyAddress: formEl.companyAddress.value,
     companyPhone: formEl.companyPhone.value,
     inspectionDate: formEl.inspectionDate.value,
+    nextInspectionDate: formEl.nextInspectionDate.value,
     printName: formEl.printName.value,
     signature: signatureDataUrl
   };
