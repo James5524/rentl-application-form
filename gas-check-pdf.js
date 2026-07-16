@@ -82,7 +82,9 @@ const APPLIANCE_FIELD_LABELS = [
   ['landlordOwned', 'Is this appliance owned by the landlord?'],
   ['ventilation', 'Is there adequate ventilation?'],
   ['serviced', 'Has the appliance been serviced?'],
-  ['combustionRatio', 'Combustion performance reading'],
+  ['coco2Ratio', 'CO:CO2 ratio'],
+  ['co2Percent', 'CO2 %'],
+  ['coPpm', 'CO ppm'],
   ['safeToUse', 'Is this appliance safe to use?'],
   ['coAlarms', 'CO & smoke alarms present and tested working?']
 ];
@@ -111,7 +113,7 @@ async function buildGasCheckPdf(data) {
       // ---------- Property / landlord details ----------
       sectionHeading(doc, 'Inspection address');
       labelValueRow(doc, 'ADDRESS', data.propertyAddress, 130);
-      labelValueRow(doc, 'OCCUPIER', data.occupierName, 130);
+      labelValueRow(doc, 'LANDLORD NAME', data.landlordName, 130);
       labelValueRow(doc, 'ACCOMMODATION RENTED?', data.accommodationRented, 130);
 
       sectionHeading(doc, 'Agent / landlord details');
