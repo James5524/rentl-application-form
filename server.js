@@ -470,16 +470,29 @@ app.delete('/api/forms/:formId/submissions/:subId', asyncRoute(async (req, res) 
 // dashboard fallback to recover a lost submission from).
 app.post('/api/gas-check/submit', asyncRoute(async (req, res) => {
   const data = req.body || {};
-  if (!data.propertyAddress || !data.engineerName || !data.signature) {
+  if (!data.addressLine1 || !data.engineerName || !data.signature) {
     return res.status(400).json({ error: 'Missing required fields.' });
   }
   if (!RESEND_API_KEY || !NOTIFY_EMAIL) {
     return res.status(500).json({ error: 'Email sending is not configured on this server.' });
   }
 
+  // No database for this form, so there's no sequential counter to draw a
+  // serial number from - instead generate a short, practically-unique code
+  // from the current time plus a few random bytes.
+  const serialNo = `GSR-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+  data.serialNo = serialNo;
+
   const pdfBuffer = await buildGasCheckPdf(data);
-  const addressSlug = (data.propertyAddress || 'property').split(',')[0].replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
+  const addressSlug = (data.addressLine1 || 'property').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
   const filename = `Gas_Safety_Record_${addressSlug}_${data.inspectionDate || ''}.pdf`;
+
+  const recipients = [NOTIFY_EMAIL];
+  if (data.engineerEmail && data.engineerEmail.trim()) {
+    recipients.push(data.engineerEmail.trim());
+  }
+
+  const fullAddress = [data.addressLine1, data.addressLine2, data.addressPostcode].filter(Boolean).join(', ');
 
   const emailRes = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -489,9 +502,9 @@ app.post('/api/gas-check/submit', asyncRoute(async (req, res) => {
     },
     body: JSON.stringify({
       from: NOTIFY_FROM,
-      to: [NOTIFY_EMAIL],
-      subject: `Gas Safety Record - ${data.propertyAddress || 'Property'}`,
-      html: `<p>A new Landlord Gas Safety Record has been submitted for:</p><p><strong>${escapeHtml(data.propertyAddress || '')}</strong></p><p>See attached PDF.</p>`,
+      to: recipients,
+      subject: `Gas Safety Record - ${fullAddress || 'Property'} (${serialNo})`,
+      html: `<p>A new Landlord Gas Safety Record has been submitted for:</p><p><strong>${escapeHtml(fullAddress)}</strong></p><p>Serial No: ${escapeHtml(serialNo)}</p><p>See attached PDF.</p>`,
       attachments: [{ filename, content: pdfBuffer.toString('base64') }]
     })
   });
