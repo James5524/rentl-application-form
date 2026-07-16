@@ -78,39 +78,6 @@ function cell(doc, x, y, w, h, text, opts = {}) {
   doc.y = savedY;
 }
 
-// "{label}   YES [ ] NO [ ]" all in one row, with box positions computed from
-// the measured label width so it always lines up regardless of font tweaks,
-// and box vertical position tied directly to the row's own top/height.
-function labeledYesNo(doc, x, y, w, h, label, value, fontSize) {
-  const savedX = doc.x, savedY = doc.y;
-  const isYes = String(value || '').trim().toLowerCase() === 'yes';
-  const isNo = String(value || '').trim().toLowerCase() === 'no';
-  const boxSize = 10;
-  const midY = y + h / 2;
-
-  doc.font('Helvetica-Bold').fontSize(fontSize).fillColor('#000');
-  doc.text(label, x + 4, midY - fontSize / 2, { lineBreak: false });
-  const labelW = doc.widthOfString(label);
-
-  let bx = x + 4 + labelW + 10;
-  doc.fontSize(fontSize - 0.5).text('YES', bx, midY - (fontSize - 0.5) / 2, { lineBreak: false });
-  bx += doc.widthOfString('YES') + 4;
-  doc.rect(bx, midY - boxSize / 2, boxSize, boxSize).lineWidth(0.6).strokeColor(BORDER).stroke();
-  if (isYes) {
-    doc.fontSize(boxSize - 1).text('X', bx + 2, midY - (boxSize - 1) / 2 - 1, { lineBreak: false });
-  }
-  bx += boxSize + 8;
-  doc.fontSize(fontSize - 0.5).text('NO', bx, midY - (fontSize - 0.5) / 2, { lineBreak: false });
-  bx += doc.widthOfString('NO') + 4;
-  doc.rect(bx, midY - boxSize / 2, boxSize, boxSize).lineWidth(0.6).strokeColor(BORDER).stroke();
-  if (isNo) {
-    doc.fontSize(boxSize - 1).text('X', bx + 2, midY - (boxSize - 1) / 2 - 1, { lineBreak: false });
-  }
-
-  doc.x = savedX;
-  doc.y = savedY;
-}
-
 // Full-width black bar used for section headings ("GAS INSTALLATION PIPEWORK" etc.)
 function sectionBar(doc, text, h = 15) {
   ensureSpace(doc, h + 2);
@@ -175,6 +142,14 @@ async function buildGasCheckPdf(data) {
         doc.font('Helvetica').fontSize(fontSize);
         return doc.heightOfString(String(text || ''), { width });
       }
+      // Same as lineHeight() but measures with the bold font - needed for any
+      // text that's actually rendered bold, since bold characters are wider
+      // and can wrap onto more lines than the regular font would suggest
+      // (this mismatch was the cause of the engineer box text overlapping).
+      function lineHeightBold(text, width, fontSize) {
+        doc.font('Helvetica-Bold').fontSize(fontSize);
+        return doc.heightOfString(String(text || ''), { width });
+      }
 
       // ---------- Top strip: verification line + logo ----------
       doc.font('Helvetica').fontSize(7).fillColor('#000')
@@ -224,7 +199,7 @@ async function buildGasCheckPdf(data) {
         `Tel No: ${data.companyPhone || 'Not provided'}`
       ];
       const companyInnerW = companyW - 10;
-      const companyLineHeights = companyLines.map(t => lineHeight(t, companyInnerW, 7.5) + 4);
+      const companyLineHeights = companyLines.map(t => lineHeightBold(t, companyInnerW, 7.5) + 4);
       const companyH = companyLineHeights.reduce((a, b) => a + b, 0) + 10;
 
       doc.rect(pageLeft, topBlockY, companyW, companyH).fill(YELLOW);
@@ -248,10 +223,9 @@ async function buildGasCheckPdf(data) {
 
       const rowH = 14;
       // Address line 1 (both sides, not bold). The landlord name text can be
-      // long enough to wrap onto two lines (e.g. "{name} C/O RENTL BY JGLA
-      // LTD") - measure it and grow just this row so the second line doesn't
-      // spill past the cell border.
-      const landlordText = `Name/Company: ${data.landlordName || RENTL_DETAILS.name}`;
+      // long enough to wrap onto two lines - measure it and grow just this
+      // row so the second line doesn't spill past the cell border.
+      const landlordText = data.landlordName || RENTL_DETAILS.name;
       const landlordTextH = lineHeight(landlordText, halfW - 8, 7.5);
       const row1H = Math.max(rowH, Math.ceil(landlordTextH) + 5);
       cell(doc, rx, ry, halfW, row1H, data.addressLine1 || 'Not provided', { fontSize: 7.5, valign: 'middle' });
@@ -273,8 +247,11 @@ async function buildGasCheckPdf(data) {
       ry += rowH;
 
       const rentedRowH = 16;
-      cell(doc, rx, ry, halfW, rentedRowH, '', {});
-      labeledYesNo(doc, rx, ry, halfW, rentedRowH, 'Is accommodation rented?', data.accommodationRented, 7.5);
+      const rentedValW = 22;
+      cell(doc, rx, ry, halfW - rentedValW, rentedRowH, 'Is accommodation rented? (Y/N)', { fontSize: 7.5, valign: 'middle' });
+      cell(doc, rx + halfW - rentedValW, ry, rentedValW, rentedRowH, (data.accommodationRented || '').charAt(0).toUpperCase(), {
+        fontSize: 9, bold: true, align: 'center', valign: 'middle'
+      });
       cell(doc, rx + halfW, ry, halfW, rentedRowH, `No. of Appliances tested: ${appliances.length || 1}`, { bold: true, fontSize: 7.5, valign: 'middle' });
       ry += rentedRowH;
 
@@ -361,7 +338,7 @@ async function buildGasCheckPdf(data) {
       const signLeftW = contentWidth * 0.55;
       const signRightW = contentWidth - signLeftW;
 
-      cell(doc, pageLeft, signBlockY, signLeftW, sigRowH, 'Registered Engineer Signature:', { bold: true, fontSize: 8, valign: 'middle' });
+      cell(doc, pageLeft, signBlockY, signLeftW, sigRowH, 'Registered Engineer Signature:', { fontSize: 8, valign: 'middle' });
       if (data.signature && data.signature.startsWith('data:image')) {
         try {
           const base64 = data.signature.split(',')[1];
