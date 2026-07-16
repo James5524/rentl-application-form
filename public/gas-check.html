@@ -99,6 +99,23 @@
     cursor: crosshair;
   }
   .sig-hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .input-group { display: flex; align-items: stretch; }
+  .input-group-prefix, .input-group-suffix {
+    background: #f0f1f5;
+    border: 1px solid var(--border);
+    padding: 0 11px;
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .input-group-prefix { border-right: none; border-radius: 8px 0 0 8px; }
+  .input-group-suffix { border-left: none; border-radius: 0 8px 8px 0; }
+  .input-group input { min-width: 0; flex: 1; border-radius: 8px; }
+  .input-group .input-group-prefix + input { border-radius: 0 8px 8px 0; }
+  .input-group input.has-suffix { border-radius: 8px 0 0 8px; }
   form#gas-form > button[type=submit] {
     width: 100%;
     padding: 13px 16px;
