@@ -106,7 +106,7 @@ const APPLIANCE_ROWS = [
   { key: 'make', label: 'Appliance make' },
   { key: 'model', label: 'Appliance model' },
   { key: 'flueType', label: 'Type of flue/outlet (OF/RS/FL)' },
-  { key: 'pressure', label: 'Working pressure (mbar) or heat input (kW/Btu-h)' },
+  { key: 'pressure', label: 'Working pressure (mbar)' },
   { key: 'safetyDevices', label: 'Are safety devices working? (Yes/No/NA)' },
   { divider: true },
   { key: 'spillage', label: 'Spillage (Pass/Fail/NA)' },
@@ -218,7 +218,7 @@ async function buildGasCheckPdf(data) {
       let ry = topBlockY;
       const headerH = 14;
       cell(doc, rx, ry, halfW, headerH, 'INSPECTION ADDRESS', { fill: '#fff', bold: true, fontSize: 8, align: 'center', valign: 'middle' });
-      cell(doc, rx + halfW, ry, halfW, headerH, 'AGENT/LANDLORD DETAILS (if different)', { fill: '#fff', bold: true, fontSize: 8, align: 'center', valign: 'middle' });
+      cell(doc, rx + halfW, ry, halfW, headerH, 'AGENT/LANDLORD DETAILS', { fill: '#fff', bold: true, fontSize: 8, align: 'center', valign: 'middle' });
       ry += headerH;
 
       const rowH = 14;
@@ -346,13 +346,23 @@ async function buildGasCheckPdf(data) {
           doc.image(buf, pageLeft + 170, signBlockY + 2, { width: 95, height: 16 });
         } catch (e) { /* ignore */ }
       }
-      cell(doc, pageLeft + signLeftW, signBlockY, signRightW, sigRowH * 3, 'NEXT INSPECTION DUE BEFORE:', {
-        bold: true, fontSize: 11, align: 'center', valign: 'middle'
-      });
-      doc.fontSize(11).font('Helvetica-Bold').fillColor('#000')
-        .text(formatDate(data.nextInspectionDate), pageLeft + signLeftW, signBlockY + sigRowH * 3 - 18, {
-          width: signRightW, align: 'center'
-        });
+      // Draw the border/box first, then center the label + date as one
+      // group both vertically and horizontally within it (rather than
+      // centering the label alone and placing the date at a fixed offset).
+      const inspBoxH = sigRowH * 3;
+      cell(doc, pageLeft + signLeftW, signBlockY, signRightW, inspBoxH, '', {});
+      const inspLabel = 'NEXT INSPECTION DUE BEFORE:';
+      const inspDate = formatDate(data.nextInspectionDate);
+      const inspInnerW = signRightW - 12;
+      doc.font('Helvetica-Bold').fontSize(11);
+      const inspLabelH = doc.heightOfString(inspLabel, { width: inspInnerW });
+      const inspDateH = doc.heightOfString(inspDate, { width: inspInnerW });
+      const inspGap = 6;
+      const inspTotalH = inspLabelH + inspGap + inspDateH;
+      const inspStartY = signBlockY + (inspBoxH - inspTotalH) / 2;
+      doc.fillColor('#000')
+        .text(inspLabel, pageLeft + signLeftW, inspStartY, { width: signRightW, align: 'center' });
+      doc.text(inspDate, pageLeft + signLeftW, inspStartY + inspLabelH + inspGap, { width: signRightW, align: 'center' });
 
       cell(doc, pageLeft, signBlockY + sigRowH, signLeftW, sigRowH, `Print Name: ${data.printName || ''}`, { fontSize: 8, valign: 'middle' });
       cell(doc, pageLeft, signBlockY + sigRowH * 2, signLeftW, sigRowH, `Date: ${formatDate(data.inspectionDate)}`, { fontSize: 8, valign: 'middle' });
