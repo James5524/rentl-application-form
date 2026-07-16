@@ -258,9 +258,54 @@ async function buildGasCheckPdf(data) {
       const topBlockBottom = Math.max(topBlockY + companyH, ry);
       doc.y = topBlockBottom + 3;
 
-      // ---------- Gas installation pipework ----------
-      sectionBar(doc, 'GAS INSTALLATION PIPEWORK');
+      // The top block's height is data-dependent (a long company address or
+      // engineer email can wrap onto extra lines and push topBlockBottom
+      // down). Everything below it has a fixed height EXCEPT the appliance
+      // specifics grid, which has the most rows and can absorb a few points
+      // per row without becoming unreadable. So: work out exactly how much
+      // vertical space is left for that grid and size its rows to fit -
+      // this guarantees the certificate always lands on one A4 page instead
+      // of quietly overflowing whenever the top block grows taller than the
+      // heights that were tuned for the original test data.
       const pipeH = 20;
+      const sectionBarH = 15;
+      const applHeaderH = 14;
+      const dividerH = 4;
+      const sigRowH = 20;
+      const footH = 18;
+      const labelColW = 150;
+      const applW = (contentWidth - labelColW) / APPLIANCE_SLOTS;
+
+      // Defect/remedial-work text is free-form and can run to 2-3 lines -
+      // measure the longest entry in each section and size those boxes to
+      // fit, instead of a fixed height that can clip long entries.
+      function boxHeightFor(field) {
+        let maxH = 0;
+        for (let i = 0; i < APPLIANCE_SLOTS; i++) {
+          const appl = appliances[i];
+          const txt = appl ? (appl[field] || 'None') : '';
+          if (!txt) continue;
+          maxH = Math.max(maxH, lineHeight(txt, applW - 8, 6.5));
+        }
+        return Math.max(20, Math.ceil(maxH) + 4);
+      }
+      const defectBoxH = boxHeightFor('defects');
+      const remedialBoxH = boxHeightFor('remedialWork');
+
+      const gridRowCount = APPLIANCE_ROWS.filter(r => !r.divider).length;
+      const dividerCount = APPLIANCE_ROWS.filter(r => r.divider).length;
+      const fixedBelowGrid =
+        (sectionBarH + pipeH) + // pipework
+        (sectionBarH + applHeaderH + dividerCount * dividerH) + // appliance section chrome (rows added separately)
+        (sectionBarH + applHeaderH + defectBoxH) + // defects
+        (sectionBarH + applHeaderH + remedialBoxH) + // remedial
+        (sigRowH * 3 + 4 + footH); // sign-off + footer
+      const bottomLimit = doc.page.height - doc.page.margins.bottom;
+      const availableForGrid = bottomLimit - doc.y - fixedBelowGrid;
+      const rH = Math.max(12, Math.min(16, Math.floor(availableForGrid / gridRowCount)));
+
+      // ---------- Gas installation pipework ----------
+      sectionBar(doc, 'GAS INSTALLATION PIPEWORK', sectionBarH);
       const pipeColW = contentWidth / 4;
       const pipeItems = [
         ['Equipotential Bonding satisfactory? (Y/N)', data.equipotentialBonding],
@@ -276,21 +321,16 @@ async function buildGasCheckPdf(data) {
       doc.y += pipeH;
 
       // ---------- Appliance specifics ----------
-      sectionBar(doc, 'APPLIANCE SPECIFICS');
-      const labelColW = 150;
-      const applW = (contentWidth - labelColW) / APPLIANCE_SLOTS;
-
-      applianceHeaderRow(doc, labelColW, applW, 14);
+      sectionBar(doc, 'APPLIANCE SPECIFICS', sectionBarH);
+      applianceHeaderRow(doc, labelColW, applW, applHeaderH);
 
       APPLIANCE_ROWS.forEach(row => {
         if (row.divider) {
-          const dH = 4;
-          ensureSpace(doc, dH);
-          cell(doc, pageLeft, doc.y, contentWidth, dH, '', { fill: BLACK });
-          doc.y += dH;
+          ensureSpace(doc, dividerH);
+          cell(doc, pageLeft, doc.y, contentWidth, dividerH, '', { fill: BLACK });
+          doc.y += dividerH;
           return;
         }
-        const rH = 16;
         ensureSpace(doc, rH);
         const fill = row.barRow ? BLACK : null;
         const labelColor = row.barRow ? '#ffffff' : '#000000';
@@ -307,30 +347,27 @@ async function buildGasCheckPdf(data) {
       });
 
       // ---------- Defects / remedial work ----------
-      sectionBar(doc, 'DEFECT(S) DETECTED');
-      applianceHeaderRow(doc, labelColW, applW, 14);
-      const defectH = 20;
-      ensureSpace(doc, defectH);
-      cell(doc, pageLeft, doc.y, labelColW, defectH, '', {});
+      sectionBar(doc, 'DEFECT(S) DETECTED', sectionBarH);
+      applianceHeaderRow(doc, labelColW, applW, applHeaderH);
+      ensureSpace(doc, defectBoxH);
+      cell(doc, pageLeft, doc.y, labelColW, defectBoxH, '', {});
       for (let i = 0; i < APPLIANCE_SLOTS; i++) {
         const txt = (appliances[i] || {}).defects || (appliances[i] ? 'None' : '');
-        cell(doc, pageLeft + labelColW + applW * i, doc.y, applW, defectH, txt, { fontSize: 6.5, valign: 'top' });
+        cell(doc, pageLeft + labelColW + applW * i, doc.y, applW, defectBoxH, txt, { fontSize: 6.5, valign: 'top' });
       }
-      doc.y += defectH;
+      doc.y += defectBoxH;
 
-      sectionBar(doc, 'REMEDIAL WORK UNDERTAKEN');
-      applianceHeaderRow(doc, labelColW, applW, 14);
-      ensureSpace(doc, defectH);
-      cell(doc, pageLeft, doc.y, labelColW, defectH, '', {});
+      sectionBar(doc, 'REMEDIAL WORK UNDERTAKEN', sectionBarH);
+      applianceHeaderRow(doc, labelColW, applW, applHeaderH);
+      ensureSpace(doc, remedialBoxH);
+      cell(doc, pageLeft, doc.y, labelColW, remedialBoxH, '', {});
       for (let i = 0; i < APPLIANCE_SLOTS; i++) {
         const txt = (appliances[i] || {}).remedialWork || (appliances[i] ? 'None' : '');
-        cell(doc, pageLeft + labelColW + applW * i, doc.y, applW, defectH, txt, { fontSize: 6.5, valign: 'top' });
+        cell(doc, pageLeft + labelColW + applW * i, doc.y, applW, remedialBoxH, txt, { fontSize: 6.5, valign: 'top' });
       }
-      doc.y += defectH;
+      doc.y += remedialBoxH;
 
       // ---------- Sign-off ----------
-      const sigRowH = 20;
-      const footH = 18;
       // Check space for the whole block (3 sign-off rows + gap + footer) at
       // once, since it must not be split across a page break.
       ensureSpace(doc, sigRowH * 3 + 4 + footH);
