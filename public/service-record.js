@@ -230,18 +230,6 @@ function buildForm() {
   dateInput.addEventListener('change', setDefaultNextDue);
   signSection.appendChild(fieldWrap('Next service due', true, nextDueInput));
 
-  signSection.appendChild(fieldWrap('Customer print name', true, el('input', { type: 'text', name: 'customerPrintName', required: 'required' })));
-
-  const custSigWrap = el('div', { class: 'field' });
-  custSigWrap.appendChild(el('label', { text: 'Customer signature ' }, [el('span', { class: 'req-star', text: '*' })]));
-  const custCanvas = el('canvas', { id: 'customer-sig-canvas', width: '640', height: '140' });
-  custSigWrap.appendChild(custCanvas);
-  custSigWrap.appendChild(el('div', { class: 'sig-hint', text: 'Customer draws their signature above using mouse or finger.' }));
-  const custClearBtn = el('button', { type: 'button', class: 'secondary small', style: 'margin-top:8px;' });
-  custClearBtn.textContent = 'Clear signature';
-  custSigWrap.appendChild(custClearBtn);
-  signSection.appendChild(custSigWrap);
-
   const engSigWrap = el('div', { class: 'field' });
   engSigWrap.appendChild(el('label', { text: 'Engineer signature ' }, [el('span', { class: 'req-star', text: '*' })]));
   const engCanvas = el('canvas', { id: 'engineer-sig-canvas', width: '640', height: '140' });
@@ -263,15 +251,14 @@ function buildForm() {
 
   card.appendChild(form);
 
-  const customerSig = setupSignaturePad(custCanvas, custClearBtn);
   const engineerSig = setupSignaturePad(engCanvas, engClearBtn);
 
-  form.addEventListener('submit', (e) => handleSubmit(e, customerSig, engineerSig));
+  form.addEventListener('submit', (e) => handleSubmit(e, engineerSig));
 }
 
 // Returns an object exposing hasDrawing() / dataUrl() for this pad. Each pad
-// keeps its own closure-scoped state, so the form can have two independent
-// signature pads (customer + engineer) without them clobbering each other.
+// keeps its own closure-scoped state so it doesn't clobber any other pad on
+// the same page (kept general in case a second pad is ever added back).
 function setupSignaturePad(canvas, clearBtn) {
   const ctx = canvas.getContext('2d');
   ctx.lineWidth = 2;
@@ -326,18 +313,12 @@ function setupSignaturePad(canvas, clearBtn) {
   };
 }
 
-async function handleSubmit(e, customerSig, engineerSig) {
+async function handleSubmit(e, engineerSig) {
   e.preventDefault();
   const formEl = e.target;
   const errorText = document.getElementById('error-text');
   errorText.classList.add('hidden');
 
-  if (!customerSig.hasDrawing()) {
-    errorText.textContent = 'Please have the customer draw a signature before submitting.';
-    errorText.classList.remove('hidden');
-    window.scrollTo({ top: document.getElementById('customer-sig-canvas').offsetTop - 100, behavior: 'smooth' });
-    return;
-  }
   if (!engineerSig.hasDrawing()) {
     errorText.textContent = 'Please draw the engineer signature before submitting.';
     errorText.classList.remove('hidden');
@@ -395,10 +376,6 @@ async function handleSubmit(e, customerSig, engineerSig) {
 
     inspectionDate: formEl.inspectionDate.value,
     nextServiceDue: formEl.nextServiceDue.value,
-
-    customerPrintName: formEl.customerPrintName.value,
-    customerDate: formEl.inspectionDate.value,
-    customerSignature: customerSig.dataUrl(),
 
     engineerPrintName: formEl.engineerName.value,
     engineerSignature: engineerSig.dataUrl()
