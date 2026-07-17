@@ -5,7 +5,7 @@
 // James's real "Maintenance/Service Check List" (Form Ref: REGP65) template -
 // single appliance per visit, structured combustion readings, a 2-column
 // Yes/No/N/A checklist for Appliance Checks and Safety Checks, a Findings
-// section, and BOTH a customer and an engineer signature block.
+// section, and a Registered Engineer sign-off block.
 
 const PDFDocument = require('pdfkit');
 const path = require('path');
@@ -370,29 +370,19 @@ async function buildServiceRecordPdf(data) {
       doc.y += remedialBoxH;
       doc.y += 3;
 
-      // ---------- Sign-off: customer + engineer (left), Next Service Due (right) ----------
+      // ---------- Sign-off: engineer (left), Next Service Due (right) ----------
+      // Customer print name/signature were removed at James's request - the
+      // engineer's sign-off is the only one recorded on this form.
       const sigRowH = 18;
       const footH = 18;
-      const signBlockH = sigRowH * 6;
+      const signBlockH = sigRowH * 3;
       ensureSpace(doc, signBlockH + 4 + footH);
       const signBlockY = doc.y;
       const signLeftW = contentWidth * 0.55;
       const signRightW = contentWidth - signLeftW;
 
-      // Customer block
-      cell(doc, pageLeft, signBlockY, signLeftW, sigRowH, 'Customer Signature:', { bold: true, fontSize: 8, valign: 'middle' });
-      if (data.customerSignature && data.customerSignature.startsWith('data:image')) {
-        try {
-          const base64 = data.customerSignature.split(',')[1];
-          const buf = Buffer.from(base64, 'base64');
-          doc.image(buf, pageLeft + 150, signBlockY + 1, { width: 90, height: 16 });
-        } catch (e) { /* ignore */ }
-      }
-      cellLabelValue(doc, pageLeft, signBlockY + sigRowH, signLeftW, sigRowH, 'Print Name: ', data.customerPrintName || '', { fontSize: 8 });
-      cellLabelValue(doc, pageLeft, signBlockY + sigRowH * 2, signLeftW, sigRowH, 'Date: ', formatDate(data.customerDate), { fontSize: 8 });
-
       // Engineer block
-      const engY = signBlockY + sigRowH * 3;
+      const engY = signBlockY;
       cell(doc, pageLeft, engY, signLeftW, sigRowH, 'Registered Engineer Signature:', { bold: true, fontSize: 8, valign: 'middle' });
       if (data.engineerSignature && data.engineerSignature.startsWith('data:image')) {
         try {
