@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maintenance / Service Check List</title>
+<link rel="icon" type="image/png" href="/logo.png">
+<link rel="stylesheet" href="/style.css">
+<style>
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 16px 48px;
+    background-color: var(--bg);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44'%3E%3Cpath d='M7 21 L14 13 L21 21 M9 21 V27 H19 V21' fill='none' stroke='%233b4560' stroke-width='1.6' stroke-opacity='0.14'/%3E%3C/svg%3E");
+    background-size: 44px 44px;
+  }
+  .brand-bar {
+    width: 100%;
+    background: var(--primary);
+    padding: 22px 16px;
+    margin-bottom: 36px;
+    display: flex;
+    justify-content: center;
+  }
+  .brand-bar-inner {
+    width: 100%;
+    max-width: 680px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    display: block;
+    object-fit: cover;
+  }
+  .brand-name { color: #ffffff; font-weight: 700; font-size: 17px; letter-spacing: .03em; }
+  .brand-tagline { color: rgba(255,255,255,0.65); font-size: 12px; margin-top: 1px; }
+  .form-wrap { width: 100%; max-width: 680px; }
+  .form-card-public {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 32px 28px;
+    box-shadow: var(--shadow);
+  }
+  .error-text { color: var(--danger); font-size: 13px; margin-top: 10px; }
+  .thankyou { text-align: center; padding: 40px 20px; }
+  .thankyou h2 { color: var(--primary); }
+  .section-block { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .section-block:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+  .section-title {
+    margin: 0 0 6px;
+    font-size: 17px;
+    color: var(--primary);
+    display: inline-block;
+    padding-bottom: 4px;
+    border-bottom: 3px solid var(--accent);
+  }
+  .section-body { color: var(--muted); margin: 8px 0 14px; font-size: 13px; line-height: 1.5; }
+  .field { margin-bottom: 14px; }
+  .field label { font-weight: 600; font-size: 13px; display: block; margin-bottom: 6px; color: var(--muted); }
+  .field .req-star { color: var(--danger); }
+  .row2 { display: flex; gap: 12px; }
+  .row2 > .field { flex: 1; }
+  .check-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px 16px;
+  }
+  @media (min-width: 520px) {
+    .check-grid { grid-template-columns: 1fr 1fr; }
+  }
+  .check-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .check-row label { font-size: 13px; color: var(--muted); font-weight: 600; margin: 0; flex: 1; }
+  .check-row select { width: 92px; flex-shrink: 0; }
+  #customer-sig-canvas, #engineer-sig-canvas {
+    width: 100%;
+    height: 140px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    touch-action: none;
+    cursor: crosshair;
+  }
+  .sig-hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .input-group { display: flex; align-items: stretch; }
+  .input-group-prefix, .input-group-suffix {
+    background: #f0f1f5;
+    border: 1px solid var(--border);
+    padding: 0 11px;
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .input-group-prefix { border-right: none; border-radius: 8px 0 0 8px; }
+  .input-group-suffix { border-left: none; border-radius: 0 8px 8px 0; }
+  .input-group input { min-width: 0; flex: 1; border-radius: 8px; }
+  .input-group input.has-suffix { border-radius: 8px 0 0 8px; }
+  form#service-form > button[type=submit] {
+    width: 100%;
+    padding: 13px 16px;
+    font-size: 15px;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+  <div class="brand-bar">
+    <div class="brand-bar-inner">
+      <img class="brand-mark" src="/logo.png" alt="RENTL">
+      <div>
+        <div class="brand-name">RENTL</div>
+        <div class="brand-tagline">Maintenance / Service Check List</div>
+      </div>
+    </div>
+  </div>
+  <div class="form-wrap">
+    <div id="form-card" class="form-card-public">Loading form&hellip;</div>
+  </div>
+  <script src="/service-record.js"></script>
+</body>
+</html>
