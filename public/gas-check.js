@@ -177,8 +177,7 @@ function buildForm() {
   dateInput.addEventListener('change', setDefaultNextDue);
   signSection.appendChild(fieldWrap('Next inspection due', true, nextDueInput));
 
-  signSection.appendChild(fieldWrap('Print name', true, el('input', { type: 'text', name: 'printName', required: 'required' })));
-
+  
   const sigWrap = el('div', { class: 'field' });
   sigWrap.appendChild(el('label', { text: 'Signature ' }, [el('span', { class: 'req-star', text: '*' })]));
   const canvas = el('canvas', { id: 'sig-canvas', width: '640', height: '160' });
