@@ -78,6 +78,28 @@ function cell(doc, x, y, w, h, text, opts = {}) {
   doc.y = savedY;
 }
 
+// Like cell(), but draws a bold label immediately followed by a
+// normal-weight value on the same line (e.g. "Print Name: " in bold, then
+// whatever the engineer typed in regular weight) - used wherever a label
+// needs to read bold and the entered value should not.
+function cellLabelValue(doc, x, y, w, h, label, value, opts = {}) {
+  const savedX = doc.x, savedY = doc.y;
+  const { fontSize = 7.5, border = true } = opts;
+  if (border) {
+    doc.rect(x, y, w, h).lineWidth(0.5).strokeColor(BORDER).stroke();
+  }
+  const padX = 4;
+  doc.font('Helvetica-Bold').fontSize(fontSize);
+  const combinedH = doc.heightOfString(label + value, { width: w - padX * 2 });
+  const padY = Math.max(1, (h - combinedH) / 2);
+  doc.fillColor('#000')
+    .text(label, x + padX, y + padY, { continued: true, width: w - padX * 2 });
+  doc.font('Helvetica').text(value);
+  doc.fillColor('#000000');
+  doc.x = savedX;
+  doc.y = savedY;
+}
+
 // Full-width black bar used for section headings ("GAS INSTALLATION PIPEWORK" etc.)
 function sectionBar(doc, text, h = 15) {
   ensureSpace(doc, h + 2);
@@ -164,13 +186,20 @@ async function buildGasCheckPdf(data) {
 
       // ---------- Title box ----------
       const titleH = 34;
-      cell(doc, pageLeft, doc.y, contentWidth - 62, titleH, 'LANDLORD / HOMEOWNER GAS SAFETY RECORD', {
-        bold: true, fontSize: 15, align: 'center', valign: 'middle', border: true
-      });
+      const titleW = contentWidth - 62;
+      const titleY = doc.y;
+      const titleText = 'LANDLORD / HOMEOWNER GAS SAFETY RECORD';
+      doc.roundedRect(pageLeft, titleY, titleW, titleH, 8).fill(BLACK);
+      doc.font('Helvetica-Bold').fontSize(15);
+      const titleTextH = doc.heightOfString(titleText, { width: titleW - 8 });
+      const titlePadY = Math.max(1, (titleH - titleTextH) / 2);
+      doc.fillColor('#ffffff')
+        .text(titleText, pageLeft + 4, titleY + titlePadY, { width: titleW - 8, align: 'center' });
+      doc.fillColor('#000000');
       // Extra clearance below the title so the disclaimer text doesn't run
       // under the logo (logo is drawn top-right and its bottom edge sits
       // lower than the title box because of its aspect ratio).
-      doc.y += titleH + 12;
+      doc.y = titleY + titleH + 12;
 
       // ---------- Disclaimer ----------
       const disclaimerText = 'This form allows for the recording of results of checks as defined by the Gas Safety (Installation and Use) Regulations. Information recorded on this form does not confirm that the installation was installed by a Gas Safe registered business or that the installation complies with relevant Building Regulations.';
@@ -190,44 +219,63 @@ async function buildGasCheckPdf(data) {
       const rightW = contentWidth - companyW;
       const topBlockY = doc.y;
 
-      const companyLines = [
-        `Company: ${data.companyName || 'Not provided'}`,
-        `Gas Safe ID Card No: ${data.gasSafeId || 'Not provided'}`,
-        `Engineer Name: ${data.engineerName || 'Not provided'}`,
-        `Engineer Email: ${data.engineerEmail || 'Not provided'}`,
-        `Address: ${data.companyAddress || 'Not provided'}`,
-        `Tel No: ${data.companyPhone || 'Not provided'}`
+      // Each line is [bold label, regular value] so the label reads bold and
+      // whatever the engineer typed reads in normal weight.
+      const companyFields = [
+        ['Company: ', data.companyName || 'Not provided'],
+        ['Gas Safe ID Card No: ', data.gasSafeId || 'Not provided'],
+        ['Engineer Name: ', data.engineerName || 'Not provided'],
+        ['Engineer Email: ', data.engineerEmail || 'Not provided'],
+        ['Address: ', data.companyAddress || 'Not provided'],
+        ['Tel No: ', data.companyPhone || 'Not provided']
       ];
       const companyInnerW = companyW - 10;
-      const companyLineHeights = companyLines.map(t => lineHeightBold(t, companyInnerW, 7.5) + 4);
-      const companyH = companyLineHeights.reduce((a, b) => a + b, 0) + 10;
+      // Measure with the bold font (an upper bound - the actual line is part
+      // bold/part regular, which is never wider) so the box is never too short.
+      const companyLineHeights = companyFields.map(([label, value]) => lineHeightBold(label + value, companyInnerW, 7.5) + 4);
+      const companyLinesH = companyLineHeights.reduce((a, b) => a + b, 0) + 10;
+
+      // --- right box sizing: Inspection address / Agent-landlord details ---
+      const halfW = rightW / 2;
+      const headerH = 14;
+      const rowH = 14;
+      // Address line 1 (both sides, not bold). The landlord name text can be
+      // long enough to wrap onto two lines (e.g. "{name} C/O RENTL BY JGLA
+      // LTD") - measure it and grow just this row so the second line doesn't
+      // spill past the cell border.
+      const landlordText = data.landlordName || RENTL_DETAILS.name;
+      const landlordTextH = lineHeight(landlordText, halfW - 8, 7.5);
+      const row1H = Math.max(rowH, Math.ceil(landlordTextH) + 5);
+      const rentedRowHBase = 16;
+      const rightSideH = headerH + row1H + rowH * 3 + rentedRowHBase;
+
+      // The yellow engineer box and the address/landlord boxes must end at
+      // the same y so their bottom borders line up. Whichever side is
+      // naturally shorter gets stretched to match the taller one - the
+      // yellow box grows via blank fill, the right side grows via its last
+      // row (Is accommodation rented / No. of appliances).
+      const topBlockH = Math.max(companyLinesH, rightSideH);
+      const rentedRowH = rentedRowHBase + (topBlockH - rightSideH);
+      const companyH = topBlockH;
 
       doc.rect(pageLeft, topBlockY, companyW, companyH).fill(YELLOW);
       doc.rect(pageLeft, topBlockY, companyW, companyH).lineWidth(0.5).strokeColor(BORDER).stroke();
       let cy = topBlockY + 5;
-      companyLines.forEach((text, i) => {
+      companyFields.forEach(([label, value], i) => {
         doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#000')
-          .text(text, pageLeft + 5, cy, { width: companyInnerW });
+          .text(label, pageLeft + 5, cy, { continued: true, width: companyInnerW });
+        doc.font('Helvetica').text(value);
         cy += companyLineHeights[i];
       });
       doc.fillColor('#000');
 
       // --- right box: Inspection address / Agent-landlord details ---
       const rx = pageLeft + companyW;
-      const halfW = rightW / 2;
       let ry = topBlockY;
-      const headerH = 14;
       cell(doc, rx, ry, halfW, headerH, 'INSPECTION ADDRESS', { fill: '#fff', bold: true, fontSize: 8, align: 'center', valign: 'middle' });
       cell(doc, rx + halfW, ry, halfW, headerH, 'AGENT/LANDLORD DETAILS', { fill: '#fff', bold: true, fontSize: 8, align: 'center', valign: 'middle' });
       ry += headerH;
 
-      const rowH = 14;
-      // Address line 1 (both sides, not bold). The landlord name text can be
-      // long enough to wrap onto two lines - measure it and grow just this
-      // row so the second line doesn't spill past the cell border.
-      const landlordText = data.landlordName || RENTL_DETAILS.name;
-      const landlordTextH = lineHeight(landlordText, halfW - 8, 7.5);
-      const row1H = Math.max(rowH, Math.ceil(landlordTextH) + 5);
       cell(doc, rx, ry, halfW, row1H, data.addressLine1 || 'Not provided', { fontSize: 7.5, valign: 'middle' });
       cell(doc, rx + halfW, ry, halfW, row1H, landlordText, { fontSize: 7.5, valign: 'middle' });
       ry += row1H;
@@ -246,7 +294,6 @@ async function buildGasCheckPdf(data) {
       cell(doc, rx + halfW, ry, halfW, rowH, `Tel No: ${RENTL_DETAILS.phone}`, { fontSize: 7.5, valign: 'middle' });
       ry += rowH;
 
-      const rentedRowH = 16;
       const rentedValW = 22;
       cell(doc, rx, ry, halfW - rentedValW, rentedRowH, 'Is accommodation rented? (Y/N)', { fontSize: 7.5, valign: 'middle' });
       cell(doc, rx + halfW - rentedValW, ry, rentedValW, rentedRowH, (data.accommodationRented || '').charAt(0).toUpperCase(), {
@@ -255,7 +302,7 @@ async function buildGasCheckPdf(data) {
       cell(doc, rx + halfW, ry, halfW, rentedRowH, `No. of Appliances tested: ${appliances.length || 1}`, { bold: true, fontSize: 7.5, valign: 'middle' });
       ry += rentedRowH;
 
-      const topBlockBottom = Math.max(topBlockY + companyH, ry);
+      const topBlockBottom = topBlockY + topBlockH;
       doc.y = topBlockBottom + 3;
 
       // The top block's height is data-dependent (a long company address or
@@ -283,7 +330,7 @@ async function buildGasCheckPdf(data) {
         let maxH = 0;
         for (let i = 0; i < APPLIANCE_SLOTS; i++) {
           const appl = appliances[i];
-          const txt = appl ? (appl[field] || 'None') : '';
+          const txt = appl ? (appl[field] || '') : '';
           if (!txt) continue;
           maxH = Math.max(maxH, lineHeight(txt, applW - 8, 6.5));
         }
@@ -352,7 +399,7 @@ async function buildGasCheckPdf(data) {
       ensureSpace(doc, defectBoxH);
       cell(doc, pageLeft, doc.y, labelColW, defectBoxH, '', {});
       for (let i = 0; i < APPLIANCE_SLOTS; i++) {
-        const txt = (appliances[i] || {}).defects || (appliances[i] ? 'None' : '');
+        const txt = (appliances[i] || {}).defects || '';
         cell(doc, pageLeft + labelColW + applW * i, doc.y, applW, defectBoxH, txt, { fontSize: 6.5, valign: 'top' });
       }
       doc.y += defectBoxH;
@@ -362,7 +409,7 @@ async function buildGasCheckPdf(data) {
       ensureSpace(doc, remedialBoxH);
       cell(doc, pageLeft, doc.y, labelColW, remedialBoxH, '', {});
       for (let i = 0; i < APPLIANCE_SLOTS; i++) {
-        const txt = (appliances[i] || {}).remedialWork || (appliances[i] ? 'None' : '');
+        const txt = (appliances[i] || {}).remedialWork || '';
         cell(doc, pageLeft + labelColW + applW * i, doc.y, applW, remedialBoxH, txt, { fontSize: 6.5, valign: 'top' });
       }
       doc.y += remedialBoxH;
@@ -375,7 +422,7 @@ async function buildGasCheckPdf(data) {
       const signLeftW = contentWidth * 0.55;
       const signRightW = contentWidth - signLeftW;
 
-      cell(doc, pageLeft, signBlockY, signLeftW, sigRowH, 'Registered Engineer Signature:', { fontSize: 8, valign: 'middle' });
+      cell(doc, pageLeft, signBlockY, signLeftW, sigRowH, 'Registered Engineer Signature:', { bold: true, fontSize: 8, valign: 'middle' });
       if (data.signature && data.signature.startsWith('data:image')) {
         try {
           const base64 = data.signature.split(',')[1];
@@ -401,8 +448,8 @@ async function buildGasCheckPdf(data) {
         .text(inspLabel, pageLeft + signLeftW, inspStartY, { width: signRightW, align: 'center' });
       doc.text(inspDate, pageLeft + signLeftW, inspStartY + inspLabelH + inspGap, { width: signRightW, align: 'center' });
 
-      cell(doc, pageLeft, signBlockY + sigRowH, signLeftW, sigRowH, `Print Name: ${data.printName || ''}`, { fontSize: 8, valign: 'middle' });
-      cell(doc, pageLeft, signBlockY + sigRowH * 2, signLeftW, sigRowH, `Date: ${formatDate(data.inspectionDate)}`, { fontSize: 8, valign: 'middle' });
+      cellLabelValue(doc, pageLeft, signBlockY + sigRowH, signLeftW, sigRowH, 'Print Name: ', data.printName || '', { fontSize: 8 });
+      cellLabelValue(doc, pageLeft, signBlockY + sigRowH * 2, signLeftW, sigRowH, 'Date: ', formatDate(data.inspectionDate), { fontSize: 8 });
 
       doc.y = signBlockY + sigRowH * 3 + 4;
 
