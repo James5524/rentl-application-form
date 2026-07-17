@@ -313,7 +313,7 @@ async function handleSubmit(e) {
     companyPhone: formEl.companyPhone.value,
     inspectionDate: formEl.inspectionDate.value,
     nextInspectionDate: formEl.nextInspectionDate.value,
-    printName: formEl.printName.value,
+    printName: formEl.engineerName.value,
     signature: signatureDataUrl
   };
 
