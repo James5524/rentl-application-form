@@ -526,7 +526,7 @@ app.post('/api/gas-check/submit', asyncRoute(async (req, res) => {
 // pattern as /api/gas-check/submit - nothing is saved to the database.
 app.post('/api/service-record/submit', asyncRoute(async (req, res) => {
   const data = req.body || {};
-  if (!data.addressLine1 || !data.engineerName || !data.customerSignature || !data.engineerSignature) {
+  if (!data.addressLine1 || !data.engineerName || !data.engineerSignature) {
     return res.status(400).json({ error: 'Missing required fields.' });
   }
   if (!RESEND_API_KEY || !NOTIFY_EMAIL) {
