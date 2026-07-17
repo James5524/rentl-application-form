@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { readDb, writeDb, useUpstash } = require('./db');
 const { buildGasCheckPdf } = require('./gas-check-pdf');
+const { buildServiceRecordPdf } = require('./service-record-pdf');
 
 // Load simple KEY=VALUE pairs from a .env file, if present, without adding a dependency.
 function loadEnvFile() {
@@ -518,11 +519,71 @@ app.post('/api/gas-check/submit', asyncRoute(async (req, res) => {
   res.status(201).json({ ok: true });
 }));
 
+// ---------- Maintenance / Service Check List (fixed contractor form, no dashboard storage) ----------
+
+// Generates a Service Check List PDF from the submission and emails it
+// straight to RENTL, CC'ing the engineer. Same fire-it-and-tell-them-directly
+// pattern as /api/gas-check/submit - nothing is saved to the database.
+app.post('/api/service-record/submit', asyncRoute(async (req, res) => {
+  const data = req.body || {};
+  if (!data.addressLine1 || !data.engineerName || !data.customerSignature || !data.engineerSignature) {
+    return res.status(400).json({ error: 'Missing required fields.' });
+  }
+  if (!RESEND_API_KEY || !NOTIFY_EMAIL) {
+    return res.status(500).json({ error: 'Email sending is not configured on this server.' });
+  }
+
+  // No database for this form, so there's no sequential counter to draw a
+  // serial number from - instead generate a short, practically-unique code
+  // from the current time plus a few random bytes (same pattern as GSR-...).
+  const serialNo = `SVC-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+  data.serialNo = serialNo;
+
+  const pdfBuffer = await buildServiceRecordPdf(data);
+  const addressSlug = (data.addressLine1 || 'property').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
+  const filename = `Service_Record_${addressSlug}_${data.inspectionDate || ''}.pdf`;
+
+  const recipients = [NOTIFY_EMAIL];
+  if (data.engineerEmail && data.engineerEmail.trim()) {
+    recipients.push(data.engineerEmail.trim());
+  }
+
+  const fullAddress = [data.addressLine1, data.addressLine2, data.addressPostcode].filter(Boolean).join(', ');
+
+  const emailRes = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from: NOTIFY_FROM,
+      to: recipients,
+      subject: `Service Record - ${fullAddress || 'Property'} (${serialNo})`,
+      html: `<p>A new Maintenance/Service Check List has been submitted for:</p><p><strong>${escapeHtml(fullAddress)}</strong></p><p>Serial No: ${escapeHtml(serialNo)}</p><p>See attached PDF.</p>`,
+      attachments: [{ filename, content: pdfBuffer.toString('base64') }]
+    })
+  });
+
+  if (!emailRes.ok) {
+    const body = await emailRes.text().catch(() => '');
+    console.error('Service record email failed:', emailRes.status, body);
+    return res.status(502).json({ error: 'Could not send the email. Please try again or contact RENTL directly.' });
+  }
+
+  res.status(201).json({ ok: true });
+}));
+
 // ---------- Pages ----------
 
 // Gas Safety Record contractor form page
 app.get('/gas-check', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'gas-check.html'));
+});
+
+// Maintenance/Service Check List contractor form page
+app.get('/service-record', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'service-record.html'));
 });
 
 // Public shareable form page. Fills in the page title and link-preview
