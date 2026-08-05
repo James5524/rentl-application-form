@@ -67,7 +67,11 @@ function escapeHtml(str) {
 // ---------- Forms list ----------
 
 async function loadFormsList() {
-  const res = await fetch('/api/forms');
+  const res = await authedFetch('/api/forms');
+  // Not ok on first load usually just means the auth gate is mid-check (see auth.js) --
+  // it'll reload the page itself once a valid key is entered, so there's nothing to render
+  // here in the meantime. Bail quietly rather than assume the error body is a forms array.
+  if (!res.ok) return;
   const forms = await res.json();
   renderFormsList(forms);
 }
@@ -99,7 +103,7 @@ function renderFormsList(forms) {
     };
     card.querySelector('[data-action=delete]').onclick = async () => {
       if (!confirm(`Delete "${f.title}"? This also deletes its responses.`)) return;
-      await fetch(`/api/forms/${f.id}`, { method: 'DELETE' });
+      await authedFetch(`/api/forms/${f.id}`, { method: 'DELETE' });
       loadFormsList();
     };
     els.formsGrid.appendChild(card);
@@ -119,7 +123,7 @@ async function duplicateForm(formSummary) {
   const suggested = `${formSummary.title} (copy)`;
   const title = prompt('Title for the new form (e.g. the property address):', suggested);
   if (title === null) return; // cancelled
-  const res = await fetch(`/api/forms/${formSummary.id}/duplicate`, {
+  const res = await authedFetch(`/api/forms/${formSummary.id}/duplicate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: title.trim() || suggested })
@@ -131,7 +135,7 @@ async function duplicateForm(formSummary) {
 }
 
 async function openForm(id) {
-  const res = await fetch(`/api/forms/${id}`);
+  const res = await authedFetch(`/api/forms/${id}`);
   if (!res.ok) return showToast('Could not load form');
   currentForm = await res.json();
   renderBuilder();
@@ -538,13 +542,13 @@ async function saveForm() {
 
   let res;
   if (currentForm.id) {
-    res = await fetch(`/api/forms/${currentForm.id}`, {
+    res = await authedFetch(`/api/forms/${currentForm.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
   } else {
-    res = await fetch('/api/forms', {
+    res = await authedFetch('/api/forms', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -609,7 +613,7 @@ function getRowValues(fields, data) {
 }
 
 async function openSubmissions(formId) {
-  const res = await fetch(`/api/forms/${formId}/submissions`);
+  const res = await authedFetch(`/api/forms/${formId}/submissions`);
   if (!res.ok) return showToast('Could not load submissions');
   const { form, submissions } = await res.json();
   currentForm = form;
@@ -638,7 +642,7 @@ function renderSubmissionsTable(form, submissions) {
     tr.innerHTML = `<td>${date}</td>${columns.map(c => `<td>${escapeHtml(rowValues[c.key])}</td>`).join('')}<td><button class="secondary small" data-del="${s.id}">Delete</button></td>`;
     tbody.appendChild(tr);
     tr.querySelector('[data-del]').onclick = async () => {
-      await fetch(`/api/forms/${form.id}/submissions/${s.id}`, { method: 'DELETE' });
+      await authedFetch(`/api/forms/${form.id}/submissions/${s.id}`, { method: 'DELETE' });
       openSubmissions(form.id);
     };
   });

@@ -75,6 +75,19 @@ You don't need to verify a domain in Resend for this — sending to your own acc
 
 *(Running locally instead? Copy `.env.example` to `.env` in the project folder and fill in the same two values — no deployment needed to test it.)*
 
+## 6. Lock the dashboard with a password
+
+By default the form builder, form list, and every response are open to anyone with the URL — fine while only you know it exists, but Keystone (RENTL's CRM) now also calls this app's API directly to pull in new applications automatically, so it's worth locking down.
+
+1. Pick any long random password (a password manager's "generate" button is fine).
+2. In Render, go to your service → **Environment**, and add:
+   - `ADMIN_KEY` = the password you picked
+3. Redeploy. Reload the dashboard — you'll be asked for the password before you see anything. Keystone needs the exact same value in its own settings to keep working; if you ever change it here, tell Claude so it can be updated there too.
+
+The applicant-facing links (a property's application form, the gas safety/service record links you send to contractors) are never affected by this — those stay open to whoever you send them to, password or not.
+
+*(Running locally instead? Add the same `ADMIN_KEY` line to your `.env` file.)*
+
 ## Data storage
 
 Locally (no Upstash variables set), everything lives in `data/db.json`. Once those are set (see part 4), all reads/writes go to your free Upstash Redis database instead, and that file is unused.

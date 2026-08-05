@@ -39,6 +39,23 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL;
 const NOTIFY_FROM = process.env.NOTIFY_FROM || 'FormForge <onboarding@resend.dev>';
 
+// Admin protection (optional, but required in practice the moment this is deployed somewhere
+// public): the form builder, form list, and submissions are all plain, unauthenticated routes by
+// design (see README "Notes on scope" -- a lean single-user tool). That was fine while only the
+// person who knew the URL ever used it, but Keystone (RENTL's own CRM) now calls this API
+// automatically too, over the public internet, so the API needs a lock on it. Set ADMIN_KEY and
+// every form-management route below requires it via an `x-admin-key` header; the public routes an
+// applicant actually uses (viewing/submitting a form, the gas-check/service-record contractor
+// links) are deliberately left open, same as before -- a lock on those would just break the
+// links this whole tool exists to hand out. If ADMIN_KEY isn't set (e.g. quick local testing),
+// admin routes stay open, matching how RESEND_API_KEY above already degrades gracefully too.
+const ADMIN_KEY = process.env.ADMIN_KEY;
+function requireAdmin(req, res, next) {
+  if (!ADMIN_KEY) return next(); // not configured -- behave exactly as before (open)
+  if (req.get('x-admin-key') === ADMIN_KEY) return next();
+  res.status(401).json({ error: 'Missing or incorrect admin key.' });
+}
+
 // Builds a clean, Jotform-style notification email: a colored title bar, then
 // one label/value block per question, with repeater fields grouped under a
 // pill-style "Adult 1" / "Adult 2" heading - only for adults actually
@@ -280,7 +297,7 @@ async function ensureSeedTemplate() {
 // ---------- Forms API ----------
 
 // List all forms (summary only)
-app.get('/api/forms', asyncRoute(async (req, res) => {
+app.get('/api/forms', requireAdmin, asyncRoute(async (req, res) => {
   const db = await readDb();
   const summaries = db.forms.map(f => ({
     id: f.id,
@@ -295,7 +312,7 @@ app.get('/api/forms', asyncRoute(async (req, res) => {
 }));
 
 // Get a single form (full editable version, for the builder)
-app.get('/api/forms/:id', asyncRoute(async (req, res) => {
+app.get('/api/forms/:id', requireAdmin, asyncRoute(async (req, res) => {
   const db = await readDb();
   const form = db.forms.find(f => f.id === req.params.id);
   if (!form) return res.status(404).json({ error: 'Form not found' });
@@ -316,7 +333,7 @@ app.get('/api/forms/:id/public', asyncRoute(async (req, res) => {
 }));
 
 // Create a new form
-app.post('/api/forms', asyncRoute(async (req, res) => {
+app.post('/api/forms', requireAdmin, asyncRoute(async (req, res) => {
   const { title, description, fields } = req.body;
   if (!title || typeof title !== 'string') {
     return res.status(400).json({ error: 'Title is required' });
@@ -337,7 +354,7 @@ app.post('/api/forms', asyncRoute(async (req, res) => {
 }));
 
 // Duplicate an existing form (same fields/description, new id, new title)
-app.post('/api/forms/:id/duplicate', asyncRoute(async (req, res) => {
+app.post('/api/forms/:id/duplicate', requireAdmin, asyncRoute(async (req, res) => {
   const db = await readDb();
   const source = db.forms.find(f => f.id === req.params.id);
   if (!source) return res.status(404).json({ error: 'Form not found' });
@@ -358,7 +375,7 @@ app.post('/api/forms/:id/duplicate', asyncRoute(async (req, res) => {
 }));
 
 // Update an existing form
-app.put('/api/forms/:id', asyncRoute(async (req, res) => {
+app.put('/api/forms/:id', requireAdmin, asyncRoute(async (req, res) => {
   const db = await readDb();
   const idx = db.forms.findIndex(f => f.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Form not found' });
@@ -376,7 +393,7 @@ app.put('/api/forms/:id', asyncRoute(async (req, res) => {
 }));
 
 // Delete a form (and its submissions)
-app.delete('/api/forms/:id', asyncRoute(async (req, res) => {
+app.delete('/api/forms/:id', requireAdmin, asyncRoute(async (req, res) => {
   const db = await readDb();
   const exists = db.forms.some(f => f.id === req.params.id);
   if (!exists) return res.status(404).json({ error: 'Form not found' });
@@ -417,7 +434,7 @@ app.post('/api/forms/:id/submit', asyncRoute(async (req, res) => {
 }));
 
 // List submissions for a form
-app.get('/api/forms/:id/submissions', asyncRoute(async (req, res) => {
+app.get('/api/forms/:id/submissions', requireAdmin, asyncRoute(async (req, res) => {
   const db = await readDb();
   const form = db.forms.find(f => f.id === req.params.id);
   if (!form) return res.status(404).json({ error: 'Form not found' });
@@ -428,7 +445,7 @@ app.get('/api/forms/:id/submissions', asyncRoute(async (req, res) => {
 }));
 
 // Export submissions as CSV
-app.get('/api/forms/:id/submissions/export', asyncRoute(async (req, res) => {
+app.get('/api/forms/:id/submissions/export', requireAdmin, asyncRoute(async (req, res) => {
   const db = await readDb();
   const form = db.forms.find(f => f.id === req.params.id);
   if (!form) return res.status(404).json({ error: 'Form not found' });
@@ -454,7 +471,7 @@ app.get('/api/forms/:id/submissions/export', asyncRoute(async (req, res) => {
 }));
 
 // Delete a single submission
-app.delete('/api/forms/:formId/submissions/:subId', asyncRoute(async (req, res) => {
+app.delete('/api/forms/:formId/submissions/:subId', requireAdmin, asyncRoute(async (req, res) => {
   const db = await readDb();
   const before = db.submissions.length;
   db.submissions = db.submissions.filter(s => !(s.formId === req.params.formId && s.id === req.params.subId));
