@@ -37,7 +37,11 @@ const FIELD_TYPE_LABELS = {
   date: 'Date',
   select: 'Dropdown',
   radio: 'Multiple choice',
-  checkbox: 'Checkboxes'
+  checkbox: 'Checkboxes',
+  // Real UK address lookup (23 Aug 2026) -- see public/form.js's own 'address' case for the
+  // actual search widget. Placing an "address" field immediately before a field whose own
+  // label mentions "postcode" auto-fills that one too when a suggestion is picked.
+  address: 'Address (with lookup)'
 };
 
 const OPTION_TYPES = ['select', 'radio', 'checkbox'];

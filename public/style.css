@@ -259,3 +259,37 @@ table.submissions th { color: var(--muted); font-weight: 600; font-size: 12px; t
   pointer-events: none;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
+
+/* Real address lookup (23 Aug 2026) -- see public/form.js's 'address' case + initAddressSearch(). */
+.address-search-wrap { position: relative; }
+.address-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  box-shadow: var(--shadow);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.address-opt {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.address-opt:hover { background: var(--bg); }
+.address-dup-warning {
+  margin: 4px 0 14px;
+  padding: 10px 14px;
+  background: #fef3e2;
+  border: 1px solid #f5cd8a;
+  color: #92600a;
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}

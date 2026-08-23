@@ -5,6 +5,7 @@ const fs = require('fs');
 const { readDb, writeDb, useUpstash } = require('./db');
 const { buildGasCheckPdf } = require('./gas-check-pdf');
 const { buildServiceRecordPdf } = require('./service-record-pdf');
+const { homedataAutocomplete, homedataGetAddress } = require('./homedata');
 
 // Load simple KEY=VALUE pairs from a .env file, if present, without adding a dependency.
 function loadEnvFile() {
@@ -317,6 +318,19 @@ app.get('/api/forms/:id', requireAdmin, asyncRoute(async (req, res) => {
   const form = db.forms.find(f => f.id === req.params.id);
   if (!form) return res.status(404).json({ error: 'Form not found' });
   res.json(form);
+}));
+
+// Real address lookup (23 Aug 2026) -- server-side proxy so the real Homedata key never
+// reaches the browser; see homedata.js for the provider details and field-name mapping.
+// Deliberately public, no requireAdmin -- an applicant filling in a public form isn't
+// logged in, same reasoning every other applicant-facing route here already follows.
+app.get('/api/address/autocomplete', asyncRoute(async (req, res) => {
+  const data = await homedataAutocomplete(req.query.term || '');
+  res.json(data);
+}));
+app.get('/api/address/get', asyncRoute(async (req, res) => {
+  const data = await homedataGetAddress(req.query.id || '');
+  res.json(data || {});
 }));
 
 // Public-safe version of a form (for the shareable link, no internal metadata needed beyond fields)

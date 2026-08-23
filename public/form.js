@@ -61,9 +61,7 @@ function renderForm(form, card) {
   const formEl = document.createElement('form');
   formEl.id = 'public-form';
 
-  form.fields.forEach(field => {
-    formEl.appendChild(buildFieldBlock(field));
-  });
+  fieldsToBlocks(form.fields, id => id).forEach(b => formEl.appendChild(b));
 
   const errorText = document.createElement('div');
   errorText.className = 'error-text hidden';
@@ -80,12 +78,30 @@ function renderForm(form, card) {
   card.appendChild(formEl);
 }
 
-// Builds the DOM for one top-level field: a heading block, a repeating group,
-// or a normal question.
-function buildFieldBlock(field) {
-  if (field.type === 'heading') return buildHeadingBlock(field);
-  if (field.type === 'repeater') return buildRepeaterBlock(field);
-  return buildQuestionBlock(field, field.id);
+// Builds the DOM for a whole list of fields (top-level, or one repeater item's own
+// itemFields) -- a heading block, a repeating group, or a normal question. `nameForId`
+// turns a field's own id into its real submission-key name (identity at top level;
+// `${repeaterId}__${n}__${fieldId}` inside a repeater item -- see buildRepeaterBlock).
+//
+// Also where an `address` field (23 Aug 2026, real address lookup -- see buildInput's
+// own 'address' case) finds its own postcode field to auto-fill: whichever field
+// immediately follows it with "postcode" in its own label, matched by label text since
+// FormForge's field ids are random-generated, not a fixed naming convention like
+// Keystone's own equivalent widget can rely on.
+function fieldsToBlocks(fields, nameForId) {
+  const blocks = [];
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    if (field.type === 'heading') { blocks.push(buildHeadingBlock(field)); continue; }
+    if (field.type === 'repeater') { blocks.push(buildRepeaterBlock(field)); continue; }
+    let postcodeName = null;
+    if (field.type === 'address') {
+      const next = fields[i + 1];
+      if (next && next.type !== 'heading' && next.type !== 'repeater' && /postcode/i.test(next.label || '')) postcodeName = nameForId(next.id);
+    }
+    blocks.push(buildQuestionBlock(field, nameForId(field.id), postcodeName));
+  }
+  return blocks;
 }
 
 function buildHeadingBlock(field) {
@@ -106,14 +122,16 @@ function buildHeadingBlock(field) {
 
 // A normal question: label + input, where `name` is the field's submission key
 // (a plain field id at the top level, or a compound "repeaterId__n__fieldId" inside a group).
-function buildQuestionBlock(field, name) {
+// `postcodeName` (only ever set for an `address` field, see fieldsToBlocks above) is the
+// sibling postcode field's own name, so buildInput's 'address' case can fill it too.
+function buildQuestionBlock(field, name, postcodeName) {
   const wrap = document.createElement('div');
   wrap.className = 'preview-field';
   const label = document.createElement('label');
   label.className = 'field-label';
   label.innerHTML = `${escapeHtml(field.label)} ${field.required ? '<span class="req-star">*</span>' : ''}`;
   wrap.appendChild(label);
-  wrap.appendChild(buildInput(field, name));
+  wrap.appendChild(buildInput(field, name, postcodeName));
   return wrap;
 }
 
@@ -147,6 +165,32 @@ function buildRepeaterBlock(field) {
   const itemsContainer = document.createElement('div');
   wrap.appendChild(itemsContainer);
 
+  // Shared duplicate-address warning (23 Aug 2026, James: allow the same address across
+  // several adults on one application -- people genuinely do already live together -- but
+  // "there should be a warning to say is this correct, as this may affect your application
+  // if the information entered is incorrect"). One banner for the whole repeater rather than
+  // per-field, since the thing being flagged is a relationship BETWEEN fields, not any one
+  // field's own value.
+  const dupWarning = document.createElement('div');
+  dupWarning.className = 'address-dup-warning hidden';
+  dupWarning.textContent = 'More than one applicant has entered the same address — is this correct? This may affect your application if the information entered is incorrect.';
+  wrap.appendChild(dupWarning);
+
+  const checkDuplicateAddresses = () => {
+    const inputs = Array.from(itemsContainer.querySelectorAll('.address-search-input'));
+    const seen = new Map();
+    let dup = false;
+    inputs.forEach(inp => {
+      const v = inp.value.trim().toLowerCase();
+      if (!v) return;
+      if (seen.has(v)) dup = true;
+      seen.set(v, true);
+    });
+    dupWarning.classList.toggle('hidden', !dup);
+  };
+  itemsContainer.addEventListener('input', e => { if (e.target.classList.contains('address-search-input')) checkDuplicateAddresses(); });
+  itemsContainer.addEventListener('address-picked', checkDuplicateAddresses);
+
   const rebuild = (count) => {
     itemsContainer.innerHTML = '';
     for (let i = 1; i <= count; i++) {
@@ -157,15 +201,10 @@ function buildRepeaterBlock(field) {
       blockTitle.textContent = `${field.itemLabel || 'Person'} ${i}`;
       block.appendChild(blockTitle);
 
-      (field.itemFields || []).forEach(itemField => {
-        if (itemField.type === 'heading') {
-          block.appendChild(buildHeadingBlock(itemField));
-        } else {
-          block.appendChild(buildQuestionBlock(itemField, `${field.id}__${i}__${itemField.id}`));
-        }
-      });
+      fieldsToBlocks(field.itemFields || [], id => `${field.id}__${i}__${id}`).forEach(b => block.appendChild(b));
       itemsContainer.appendChild(block);
     }
+    checkDuplicateAddresses();
   };
 
   select.addEventListener('change', () => rebuild(parseInt(select.value, 10) || 0));
@@ -174,10 +213,33 @@ function buildRepeaterBlock(field) {
   return wrap;
 }
 
-function buildInput(field, name) {
+function buildInput(field, name, postcodeName) {
   const ph = field.placeholder || '';
 
   switch (field.type) {
+    // Real address lookup (23 Aug 2026, James: "so they cannot enter a wrong address") --
+    // goes through this app's own /api/address/* proxy (server.js), never calls the real
+    // provider from the browser. A pick is required, not just offered: typing without ever
+    // choosing a real suggestion leaves the field unconfirmed, and handleSubmit() below
+    // blocks the whole form until every required address field has a genuine pick behind
+    // it -- see initAddressSearch()'s `dataset.confirmed` flag.
+    case 'address': {
+      const container = document.createElement('div');
+      container.className = 'address-search-wrap';
+      const el = document.createElement('input');
+      el.type = 'text';
+      el.name = name;
+      el.placeholder = ph || 'Start typing your address…';
+      el.autocomplete = 'off';
+      el.className = 'address-search-input';
+      if (field.required) el.required = true;
+      const results = document.createElement('div');
+      results.className = 'address-results hidden';
+      container.appendChild(el);
+      container.appendChild(results);
+      initAddressSearch(el, results, postcodeName);
+      return container;
+    }
     case 'textarea': {
       const el = document.createElement('textarea');
       el.name = name;
@@ -243,6 +305,61 @@ function buildInput(field, name) {
   }
 }
 
+// Wires up one address search box: type-ahead against /api/address/autocomplete, pick a
+// real suggestion to fill the box (and the sibling postcode field, when postcodeName is
+// given) via /api/address/get. `input.dataset.confirmed` is the one thing that matters for
+// submission -- only ever set to '1' by an actual pick, cleared the moment the text changes
+// afterward, so a half-typed or hand-edited address can never quietly pass as confirmed.
+function initAddressSearch(input, results, postcodeName) {
+  let timer = null;
+  const hide = () => { results.classList.add('hidden'); results.innerHTML = ''; };
+  input.addEventListener('input', () => {
+    input.dataset.confirmed = '';
+    clearTimeout(timer);
+    const term = input.value.trim();
+    if (term.length < 3) { hide(); return; }
+    timer = setTimeout(() => {
+      fetch(`/api/address/autocomplete?term=${encodeURIComponent(term)}`)
+        .then(r => r.json())
+        .then(data => {
+          // Lookup not set up yet on this deployment -- fall back to a plain text field
+          // rather than trap the applicant behind an impossible-to-satisfy requirement.
+          if (data && data.configured === false) { input.dataset.lookupUnavailable = '1'; hide(); return; }
+          const suggestions = (data && data.suggestions) || [];
+          if (!suggestions.length) { hide(); return; }
+          results.innerHTML = '';
+          suggestions.forEach(s => {
+            const opt = document.createElement('div');
+            opt.className = 'address-opt';
+            opt.textContent = s.address;
+            opt.dataset.id = s.id;
+            results.appendChild(opt);
+          });
+          results.classList.remove('hidden');
+        })
+        .catch(() => hide());
+    }, 250);
+  });
+  results.addEventListener('mousedown', e => {
+    const opt = e.target.closest('.address-opt');
+    if (!opt) return;
+    fetch(`/api/address/get?id=${encodeURIComponent(opt.dataset.id)}`)
+      .then(r => r.json())
+      .then(a => {
+        input.value = (a && a.full) || opt.textContent;
+        input.dataset.confirmed = '1';
+        if (postcodeName && a && a.postcode) {
+          const pc = document.querySelector(`[name="${postcodeName}"]`);
+          if (pc) pc.value = a.postcode;
+        }
+        hide();
+        input.dispatchEvent(new Event('address-picked', { bubbles: true }));
+      })
+      .catch(() => {});
+  });
+  document.addEventListener('click', e => { if (e.target !== input) hide(); });
+}
+
 function getFieldValue(formEl, name, type) {
   if (type === 'checkbox') {
     const checked = formEl.querySelectorAll(`input[name="${name}"]:checked`);
@@ -285,6 +402,21 @@ async function handleSubmit(e, form) {
   const formEl = e.target;
   const errorText = document.getElementById('error-text');
   errorText.classList.add('hidden');
+
+  // Any address field with text in it must carry a real, confirmed pick behind that text --
+  // not just typed characters that happen to look like an address (James: "so they cannot
+  // enter a wrong address"). Applies whether the field is required or not -- an optional
+  // address field left BLANK is fine either way, but one with something typed and never
+  // actually chosen from the real suggestions is exactly the case this exists to catch.
+  const unconfirmed = Array.from(formEl.querySelectorAll('.address-search-input'))
+    .find(inp => inp.value.trim() && inp.dataset.confirmed !== '1' && inp.dataset.lookupUnavailable !== '1');
+  if (unconfirmed) {
+    errorText.textContent = 'Please choose your address from the suggestions as you type it, for every address field on this form.';
+    errorText.classList.remove('hidden');
+    unconfirmed.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    unconfirmed.focus();
+    return;
+  }
 
   const data = collectData(form, formEl);
 
