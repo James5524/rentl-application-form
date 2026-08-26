@@ -19,7 +19,19 @@ async function homedataAutocomplete(term) {
   if (!HOMEDATA_API_KEY) return { suggestions: [], configured: false };
   if (String(term || '').trim().length < 3) return { suggestions: [], configured: true };
   const r = await fetch(`${BASE}/address/find/?q=${encodeURIComponent(term)}`, { headers: { Authorization: `Api-Key ${HOMEDATA_API_KEY}` } });
-  if (!r.ok) return { suggestions: [], configured: true };
+  if (!r.ok) {
+    // 26 Aug 2026: a failed upstream call (rate limit, outage, revoked key, anything) used to
+    // come back indistinguishable from "genuinely zero matches" -- which the form treats as a
+    // real, confirmable answer... except there's nothing to confirm, so it silently became
+    // impossible to submit ANY application until this got noticed. `error: true` lets the
+    // client fall back to a plain typed address instead (same as `configured: false`), same as
+    // James: "will not allow an application form to be submitted" -- an upstream hiccup must
+    // never be able to do that again. Logged here (Render captures stdout/stderr) so the real
+    // cause -- quota, expired key, outage -- is visible next time, instead of a silent empty array.
+    let body = ''; try { body = (await r.text()).slice(0, 300); } catch {}
+    console.error(`[homedata] autocomplete failed: HTTP ${r.status} ${r.statusText} -- ${body}`);
+    return { suggestions: [], configured: true, error: true, status: r.status };
+  }
   const data = await r.json();
   const suggestions = (data.suggestions || []).map(s => ({
     id: s.uprn_token,
@@ -31,7 +43,11 @@ async function homedataAutocomplete(term) {
 async function homedataGetAddress(token) {
   if (!HOMEDATA_API_KEY || !token) return null;
   const r = await fetch(`${BASE}/property/${encodeURIComponent(token)}/address/`, { headers: { Authorization: `Api-Key ${HOMEDATA_API_KEY}` } });
-  if (!r.ok) return null;
+  if (!r.ok) {
+    let body = ''; try { body = (await r.text()).slice(0, 300); } catch {}
+    console.error(`[homedata] getAddress failed: HTTP ${r.status} ${r.statusText} -- ${body}`);
+    return null;
+  }
   const data = await r.json();
   const a = data.address || {};
   return {

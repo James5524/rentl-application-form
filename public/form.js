@@ -322,9 +322,12 @@ function initAddressSearch(input, results, postcodeName) {
       fetch(`/api/address/autocomplete?term=${encodeURIComponent(term)}`)
         .then(r => r.json())
         .then(data => {
-          // Lookup not set up yet on this deployment -- fall back to a plain text field
-          // rather than trap the applicant behind an impossible-to-satisfy requirement.
-          if (data && data.configured === false) { input.dataset.lookupUnavailable = '1'; hide(); return; }
+          // Lookup not set up on this deployment, OR the upstream call itself failed (rate
+          // limit, outage, anything -- see homedata.js's `error` flag, added 26 Aug 2026 after
+          // exactly this silently blocked every real applicant) -- either way, fall back to a
+          // plain text field rather than trap the applicant behind an impossible-to-satisfy
+          // requirement they have no way to know is a backend problem, not theirs.
+          if (data && (data.configured === false || data.error)) { input.dataset.lookupUnavailable = '1'; hide(); return; }
           const suggestions = (data && data.suggestions) || [];
           if (!suggestions.length) { hide(); return; }
           results.innerHTML = '';
@@ -337,7 +340,10 @@ function initAddressSearch(input, results, postcodeName) {
           });
           results.classList.remove('hidden');
         })
-        .catch(() => hide());
+        // A network-level failure (offline, DNS, CORS, anything that never even reaches the
+        // .then above) used to just hide the dropdown and leave the field un-confirmable --
+        // same silent-block bug as the server-side one above, fixed the same way.
+        .catch(() => { input.dataset.lookupUnavailable = '1'; hide(); });
     }, 250);
   });
   results.addEventListener('mousedown', e => {
