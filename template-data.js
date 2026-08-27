@@ -19,9 +19,9 @@ const adultItemFields = [
   { id: fid('employer'), type: 'text', label: 'Current or Most Recent Employer', placeholder: '', required: true },
   { id: fid('occupation'), type: 'text', label: 'Occupation / Job Title', placeholder: '', required: true },
   { id: fid('employment_length'), type: 'text', label: 'Length of Employment', placeholder: 'e.g. 2 years 3 months', required: true },
-  { id: fid('salary'), type: 'number', label: 'Gross Annual Salary (before tax and deductions)', placeholder: '£', required: true },
+  { id: fid('salary'), type: 'number', label: 'Gross Annual Salary (before tax and deductions)', placeholder: 'e.g. 40000 for £40,000/year — not 40', required: true, incomeCheck: true },
   { id: fid('contact_employer'), type: 'radio', label: 'May we contact your employer(s) to verify your employment and stated income?', required: true, options: YES_NO },
-  { id: fid('other_income'), type: 'number', label: 'Other Gross Annual Income (from a partner or flatmate)', placeholder: '£', required: false },
+  { id: fid('other_income'), type: 'number', label: 'Other Gross Annual Income (from a partner or flatmate)', placeholder: 'e.g. 15000 for £15,000/year — not 15', required: false, incomeCheck: true },
   { id: fid('guarantor'), type: 'radio', label: 'Can you provide a working, homeowner, UK based guarantor?', required: true, options: YES_NO },
   { id: fid('criminal_convictions'), type: 'radio', label: 'Do you have any unspent criminal convictions?', required: true, options: YES_NO }
 ];

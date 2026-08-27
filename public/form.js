@@ -300,6 +300,11 @@ function buildInput(field, name, postcodeName) {
       el.name = name;
       el.placeholder = ph;
       if (field.required) el.required = true;
+      // James, 27 Aug 2026: applicants keep typing "40" meaning £40,000, which fails affordability
+      // screening on the agent side against a real income figure that's actually fine. Flagged at
+      // submit time, not on every keystroke, so a genuinely low income (a student, part-time work)
+      // never gets nagged while they're still typing.
+      if (field.incomeCheck) el.classList.add('income-check-input');
       return el;
     }
   }
@@ -422,6 +427,24 @@ async function handleSubmit(e, form) {
     unconfirmed.scrollIntoView({ behavior: 'smooth', block: 'center' });
     unconfirmed.focus();
     return;
+  }
+
+  // Same reasoning as the address check above, different failure mode (James, 27 Aug 2026): a
+  // genuine annual salary/income is never realistically under four figures, so a value like "40"
+  // is almost always "40" meant as "£40,000" with the "000" left off, not a real answer -- and it
+  // silently fails affordability screening on the agent side against a perfectly fine real income.
+  // A confirm() rather than a hard block: unlike the address field (which is objectively wrong if
+  // unconfirmed), a genuinely low income IS a valid answer sometimes (a student, part-time work),
+  // so this only asks the applicant to double-check, never refuses their real answer.
+  const lowIncome = Array.from(formEl.querySelectorAll('.income-check-input'))
+    .find(inp => inp.value !== '' && Number(inp.value) > 0 && Number(inp.value) < 1000);
+  if (lowIncome) {
+    const ok = window.confirm(`You entered £${lowIncome.value} as an annual income. Annual salaries are usually in the thousands — if you meant £${lowIncome.value},000, please cancel and correct it to ${lowIncome.value}000. Click OK only if £${lowIncome.value} is genuinely correct.`);
+    if (!ok) {
+      lowIncome.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      lowIncome.focus();
+      return;
+    }
   }
 
   const data = collectData(form, formEl);
